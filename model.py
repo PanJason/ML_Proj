@@ -6,6 +6,7 @@ import os
 from torch.autograd import Variable
 import option
 
+sizen = 200
 
 class Net(torch.nn.Module):
     def __init__(self):
