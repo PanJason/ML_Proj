@@ -83,7 +83,12 @@ def showImage(imgID, imgPath=None, annoPath=None, additionalAnno=None):
 
 def boundBoxAnno(imgID):
     '''Make annotation for bound box of chest for one image.
-    Returns [[left, top],[width, height]]
+    Returns [[left, top],[width, height]].
+    Operations:
+    left click to mark a point.
+    First the Leftmost topmost point, then the rightmost bottomost point.
+    Click the third time to cancel all.
+    Press any key to accept the marking and return the box.
     '''
     imgPath = params.data_set + "/" + str(imgID) + ".png"
     img = cv.imread(imgPath)
@@ -127,9 +132,14 @@ def boundBoxAnno(imgID):
 
 def polyLineAnno(imgID):
     '''Make annotion with polylines.
-    Press n for nextline
-    Press f to stop.
     Returns a list of polylines [(x1,y1),(x2,y2),...,(xn,yn)].
+    Operations:
+    Left click to mark a point, consequtive points are linked together.
+    The first polyline should mark the outline of chest bones.
+    The other polylines should mark each ribs, start from the outline to the spine.
+    Ribs should be marked clockwise.
+    Press n for next polyline.
+    Press f to stop recording and return.
     '''
     imgPath = params.data_set + "/" + str(imgID) + ".png"
     img = cv.imread(imgPath)
@@ -181,6 +191,7 @@ def polyLineAnno(imgID):
 
 
 def makeAllBBoxAnno(save_path):
+    'Mark all chest bound boxes of the data set(specified with program arguments --data_set).'
     bboxes = {}
     allFiles = os.listdir(params.data_set)
     for f in allFiles:
@@ -192,6 +203,11 @@ def makeAllBBoxAnno(save_path):
 
 
 def makeAllPolyAnno(save_path, start_from=None, total=None):
+    '''Mark all polylines of the data set(specified with program arguments --data_set).
+    Use start_from argument to specify which one to start with.
+    (Note that the order of pictures is lexigraphical order rather than number order due to os.listdir)
+    Use total to specify how many picture you need to make annotation.
+    '''
     polys = {}
     allFiles = os.listdir(params.data_set)
     if total is None:
