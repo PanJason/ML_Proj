@@ -229,6 +229,10 @@ def makeAllPolyAnno(save_path, start_from=None, total=None):
 
 if __name__ == "__main__":
     # makeAllPolyAnno("poly_train_139.json", 139, total=1)
-    showImage(
-        139, additionalAnno="data/fracture/annotations/additional_anno_train.json")
+    allFiles = os.listdir(params.data_set)
+    for f in allFiles:
+        num = int(f.split('.')[0])
+        print(num)
+        showImage(
+            num, additionalAnno="data/fracture/annotations/additional_anno_train.json")
     # print(boundBoxAnno(139))

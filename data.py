@@ -1,8 +1,17 @@
 # Do data processing in this file
-import cv2
-import option
-import numpy as np
+import math
 import json
+import os
+import random
+import itertools
+
+from PIL import Image
+import numpy as np
+import cv2
+import torch
+import torchvision
+
+import option
 
 
 def dataprocess(input_img):
@@ -16,8 +25,102 @@ def dataprocess(input_img):
     output_img = output_img*160/np.mean(input_img)
     return output_img
 
+
 def getAnno(imgId, anno):
     '''Get all annotation of specified image from a parsed json file,
 returns a list of bounding boxes.
     '''
-    return [i["bbox"] for i in anno["annotations"] if i["image_id"] == imgId
+    return [i["bbox"] for i in anno["annotations"] if i["image_id"] == imgId]
+
+
+def getImageFiles(dataset_path):
+    'Get all image files inside a dataset'
+    files = os.listdir(dataset_path)
+    return files
+
+
+class RibTraceDataset(torch.utils.data.IterableDataset):
+    def __init__(self, dataset, anno_path, params):
+        super(RibTraceDataset, self).__init__()
+        self.params = params
+        self.dataset = dataset
+        self.sampleRate = params.tracerSampleRate
+
+        self.anno_path = anno_path
+        with open(self.anno_path, "r") as file:
+            self.anno = json.load(file)["poly"]
+
+        self.annoted_id = list(self.anno.keys())
+        self.annoted_files = [
+            (self.dataset + "/" + s + ".png")
+            for s in self.annoted_id
+        ]
+        self.file_cnt = len(self.annoted_files)
+
+        self.regionSize = params.regionSize
+        self.width = params.regionSize
+        self.height = params.regionSize
+
+    def gen_data(self, start, end):
+        for i in range(start, end):
+            image = Image.open(self.annoted_files[i])
+            image = torchvision.transforms.Pad(int(self.regionSize/2))(image)
+            point_chunks = []
+            for poly in self.anno[self.annoted_id[i]][1:]:
+                poly = np.array(poly)
+                point_chunks.append(self.samplePoints(poly))
+            for point in itertools.chain(*point_chunks):
+                yield self.getRegion(image, point)
+
+    def samplePoints(self, poly):
+        points = []
+        for i in range(0, len(poly)-1):
+            length = np.linalg.norm(poly[i] - poly[i+1])
+            sample_cnt = int(self.sampleRate * length)
+            samples = [(
+                (poly[i+1] * (j/sample_cnt) + poly[i] * (1-(j/sample_cnt))),
+                poly[i],
+                poly[i+1],
+                j == sample_cnt - 1 and i == len(poly) - 2
+            )
+                for j in range(sample_cnt)]
+            points.append(samples)
+        return itertools.chain(*points)
+
+    def getRegion(self, image, points):
+        center, A, B, fin = points
+        result = np.zeros((self.width, self.height))
+
+        def shift(x):
+            y = random.gauss(x, self.params.regionShiftSigma)
+            y = np.clip(y, x - self.regionSize / 2, x + self.regionSize / 2)
+            y = int(round(y))
+            return y
+        C = np.array([shift(center[0]), shift(center[1])])
+
+        region = torchvision.transforms.functional.crop(
+            image, C[1], C[0], self.regionSize, self.regionSize)
+
+        P = (B-center) / np.linalg.norm(B-C) * self.regionSize / 2
+        target = P + C - center
+
+        region = torchvision.transforms.ToTensor()(region)
+        target = torch.tensor(target, dtype=torch.float32)
+        target /= self.regionSize * math.sqrt(2) / 2
+        fin = torch.tensor(fin, dtype=torch.float32)
+        fin = fin.view([1])
+        target = torch.cat((target, fin))
+        if self.params.useGPU:
+            region = region.cuda()
+            target = target.cuda()
+        return (region, target)
+
+    def __iter__(self):
+        worker_info = torch.utils.data.get_worker_info()
+        if worker_info is None:  # single-process data loading, return the full iterator
+            return self.gen_data(0, self.file_cnt)
+        else:  # in a worker process
+            per_worker = int(
+                math.ceil(self.file_cnt / float(worker_info.num_workers)))
+            worker_id = worker_info.id
+            return self.gen_data(worker_id * per_worker, min((worker_id+1) * per_worker, self.file_cnt))
