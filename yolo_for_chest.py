@@ -185,16 +185,18 @@ class chest_dataset(torch.utils.data.Dataset):
         w=self.bboxes[self.map[item]][1][0]*1.0/3056
         h=self.bboxes[self.map[item]][1][1]*1.0/3056
         gridsize=1.0/7
-        for i in range(7):
-            for j in range(7):
-                if (x<=i*gridsize<=x+w or x<=(i+1)*gridsize<=x+w\
-                    and y<=j*gridsize<=y+h or y<=(j+1)*gridsize<=y+h):
-                    target[i,j,0],target[i,j,5]=x+0.5*w,x+0.5*w
-                    target[i,j,1],target[i,j,6]=y+0.5*h,y+0.5*h
-                    target[i,j,2],target[i,j,7]=w,w
-                    target[i,j,3],target[i,j,8]=h,h
-                    target[i,j,4],target[i,j,9]=1.0,1.0
-                    target[i,j,11]=1.0
+        center_x=x+0.5*w
+        center_y=y+0.5*h
+        gridx=int(center_x/gridsize)
+        gridy=int(center_y/gridsize)
+        px=center_x/gridsize-gridx
+        py=center_y/gridsize-gridy
+        target[gridx,gridy,0],target[gridx,gridy,5]=px,px
+        target[gridx,gridy,1],target[gridx,gridy,6]=py,py
+        target[gridx,gridy,2],target[gridx,gridy,7]=w,w
+        target[gridx,gridy,3],target[gridx,gridy,8]=h,h
+        target[gridx,gridy,4],target[gridx,gridy,9]=1,1
+        target[gridx,gridy,11]=1
         return img,target
 
 def train():
