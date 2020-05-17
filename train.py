@@ -57,7 +57,7 @@ def trainClassier(params):
 
 def trainRibTracer(params):
     trainDataset = data.RibTraceDataset(
-        params.data_set, params.addi_path, params)
+        params.data_set, params.addi_path, params, True)
     valDataset = data.RibTraceDataset(
         params.val_data_set, params.val_addi_path, params)
 
@@ -68,35 +68,47 @@ def trainRibTracer(params):
     if params.useGPU:
         ribTracer = ribTracer.cuda()
 
-    loss_fn = torch.nn.MSELoss()
+    loss_fn = torch.nn.L1Loss()
     optimizer = torch.optim.Adam(
         ribTracer.parameters(), lr=params.learningRate)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, verbose=True)
 
     def calcLoss(dataset):
         total = 0
+        cnt = 0
         for batch, label in DataLoader(dataset,
                                        batch_size=params.batchSize,
-                                       num_workers=0):
+                                       pin_memory=True,
+                                       num_workers=2):
+            if params.useGPU:
+                batch = batch.cuda()
+                label = label.cuda()
             with torch.no_grad():
                 out = ribTracer(batch)
                 loss = loss_fn(out, label)
-            l = torch.mean(loss).cpu()
+            l = torch.sum(loss).cpu()
             total += l
+            cnt += 1
 
-        return total
+        return float(total) / float(cnt)
 
     train_loss_rec = []
     val_loss_rec = []
     timer = utility.Timer()
-    torch.autograd.set_detect_anomaly(True)
+    # torch.autograd.set_detect_anomaly(True)
     for epochID in range(1, params.numEpochs + 1):
         print(f"Start Epoch {epochID}")
-        ribTracer.train()
         cnt = 0
+        ribTracer.train()
         for batch, label in DataLoader(trainDataset,
                                        batch_size=params.batchSize,
-                                       num_workers=0):
+                                       pin_memory=True,
+                                       num_workers=2):
             optimizer.zero_grad()
+            if params.useGPU:
+                batch = batch.cuda()
+                label = label.cuda()
             out = ribTracer(batch)
             loss = loss_fn(out, label)
             loss.backward()
@@ -111,9 +123,10 @@ def trainRibTracer(params):
         valloss = calcLoss(valDataset)
         train_loss_rec.append(trainloss)
         val_loss_rec.append(valloss)
+        scheduler.step(trainloss)
 
         torch.save(ribTracer.state_dict(), os.path.join(
-            params.model_path, "ribTracer"))
+            params.model_path, "ribTracer.pt"))
 
         print(f"Epoch {epochID}: {timer()} Train: {trainloss} Val: {valloss}")
 

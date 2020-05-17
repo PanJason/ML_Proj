@@ -29,6 +29,10 @@ def drawPoly(img, poly, color, number):
                    cv.FONT_HERSHEY_SIMPLEX, 1, color)
 
 
+def randomColor():
+    return (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+
+
 def showImage(imgID, imgPath=None, annoPath=None, additionalAnno=None):
     'Show one image with annotation'
     if imgPath is None:

@@ -6,10 +6,12 @@ import random
 import itertools
 
 from PIL import Image
+import PIL
 import numpy as np
 import cv2
 import torch
 import torchvision
+import torchvision.transforms.functional as TransFunc
 
 import option
 
@@ -40,11 +42,12 @@ def getImageFiles(dataset_path):
 
 
 class RibTraceDataset(torch.utils.data.IterableDataset):
-    def __init__(self, dataset, anno_path, params):
+    def __init__(self, dataset, anno_path, params, augment=False):
         super(RibTraceDataset, self).__init__()
         self.params = params
         self.dataset = dataset
         self.sampleRate = params.tracerSampleRate
+        self.augment = augment
 
         self.anno_path = anno_path
         with open(self.anno_path, "r") as file:
@@ -81,7 +84,7 @@ class RibTraceDataset(torch.utils.data.IterableDataset):
                 (poly[i+1] * (j/sample_cnt) + poly[i] * (1-(j/sample_cnt))),
                 poly[i],
                 poly[i+1],
-                j == sample_cnt - 1 and i == len(poly) - 2
+                i == len(poly) - 2
             )
                 for j in range(sample_cnt)]
             points.append(samples)
@@ -96,23 +99,41 @@ class RibTraceDataset(torch.utils.data.IterableDataset):
             y = np.clip(y, x - self.regionSize / 2, x + self.regionSize / 2)
             y = int(round(y))
             return y
-        C = np.array([shift(center[0]), shift(center[1])])
+        if self.augment:
+            C = np.array([shift(center[0]), shift(center[1])])
+        else:
+            C = center
 
-        region = torchvision.transforms.functional.crop(
+        region = TransFunc.crop(
             image, C[1], C[0], self.regionSize, self.regionSize)
 
-        P = (B-center) / np.linalg.norm(B-C) * self.regionSize / 2
+        P = (B-center) / np.linalg.norm(B-center) * \
+            min(self.regionSize / 2, np.linalg.norm(B-center))
         target = P + C - center
+        target /= self.regionSize * math.sqrt(2) / 2
+
+        if self.augment:
+            angle = random.uniform(-180, 180)
+            region = TransFunc.rotate(region, angle, resample=Image.BILINEAR)
+            angle = -angle / 180.0 * math.pi
+            target = [math.cos(angle) * target[0] - math.sin(angle) * target[1],
+                      math.sin(angle) * target[0] + math.cos(angle) * target[1]]
+        if target[0] < 0.0:
+            target = [-target[0], -target[1]]
+        target[1] = target[1] / 2.0 + 0.5
+
+        fin = (fin and
+               C[0]-self.regionSize/2 <= B[0] <= C[0] + self.regionSize/2 and
+               C[1]-self.regionSize/2 <= B[1] <= C[1] + self.regionSize/2)
 
         region = torchvision.transforms.ToTensor()(region)
         target = torch.tensor(target, dtype=torch.float32)
-        target /= self.regionSize * math.sqrt(2) / 2
         fin = torch.tensor(fin, dtype=torch.float32)
         fin = fin.view([1])
         target = torch.cat((target, fin))
-        if self.params.useGPU:
-            region = region.cuda()
-            target = target.cuda()
+        # if self.params.useGPU:
+        #     region = region.cuda()
+        #     target = target.cuda()
         return (region, target)
 
     def __iter__(self):
