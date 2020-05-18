@@ -40,10 +40,12 @@ def read():
                         help='Samples per pixel use in tracer')
     parser.add_argument('--regionShiftSigma', default=20.0, type=float,
                         help='Sigma for gaussians used in region shifting')
-    parser.add_argument('--maxTrace', default=10, type=int,
+    parser.add_argument('--maxTrace', default=20, type=int,
                         help="Maximum number of regions selected by a single trace")
     parser.add_argument('--stopTraceThreshold', default=0.99, type=float,
                         help="Threshold to stop a trace")
+    parser.add_argument('--traceStep', default=0.8, type=float,
+                        help="Step of each trace sample")
 
     parsed = parser.parse_args()
 

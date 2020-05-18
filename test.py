@@ -33,21 +33,17 @@ def ribTrace(img, rigTracer, start, direction, params):
             region = region.cuda()
 
         with torch.no_grad():
-            out = rigTracer(region).numpy()[0]
-        delta = out[:2]
+            delta = rigTracer(region).numpy()[0]
         delta[1] = delta[1] * 2.0 - 1.0
-        delta = delta * params.regionSize * math.sqrt(2) / 2
+        delta = delta * params.regionSize * math.sqrt(2) / 2 * params.traceStep
         if np.dot(delta, direction) < 0:
             delta = -delta
         direction = delta
         x += delta
-        print(delta, out[2])
         x[0] = np.clip(x[0], 0, w)
         x[1] = np.clip(x[1], 0, h)
         # print(x, out[2])
         track.append(copy.deepcopy(x))
-        if out[2] >= params.stopTraceThreshold:
-            break
     return track
 
 
@@ -74,5 +70,5 @@ if __name__ == "__main__":
     params = option.read()
     with open("additional_anno/additional_anno_val.json", "r") as file:
         anno = json.load(file)
-    showRibTraceTrack("data/fracture/val_processed/101.png",
-                      anno["poly"]["101"][1:], params)
+    showRibTraceTrack("data/fracture/val_processed/127.png",
+                      anno["poly"]["127"][1:], params)

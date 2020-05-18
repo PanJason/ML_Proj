@@ -83,15 +83,14 @@ class RibTraceDataset(torch.utils.data.IterableDataset):
             samples = [(
                 (poly[i+1] * (j/sample_cnt) + poly[i] * (1-(j/sample_cnt))),
                 poly[i],
-                poly[i+1],
-                i == len(poly) - 2
+                poly[i+1]
             )
                 for j in range(sample_cnt)]
             points.append(samples)
         return itertools.chain(*points)
 
     def getRegion(self, image, points):
-        center, A, B, fin = points
+        center, A, B = points
         result = np.zeros((self.width, self.height))
 
         def shift(x):
@@ -122,15 +121,8 @@ class RibTraceDataset(torch.utils.data.IterableDataset):
             target = [-target[0], -target[1]]
         target[1] = target[1] / 2.0 + 0.5
 
-        fin = (fin and
-               C[0]-self.regionSize/2 <= B[0] <= C[0] + self.regionSize/2 and
-               C[1]-self.regionSize/2 <= B[1] <= C[1] + self.regionSize/2)
-
         region = torchvision.transforms.ToTensor()(region)
         target = torch.tensor(target, dtype=torch.float32)
-        fin = torch.tensor(fin, dtype=torch.float32)
-        fin = fin.view([1])
-        target = torch.cat((target, fin))
         # if self.params.useGPU:
         #     region = region.cuda()
         #     target = target.cuda()
