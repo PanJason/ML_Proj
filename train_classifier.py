@@ -6,7 +6,7 @@ from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torchvision.datasets import ImageFolder
 from torchvision import transforms
-from model import Net
+from model import classifier
 import time
 
 # use GPU?
@@ -14,38 +14,47 @@ gpu = [0]
 cuda_gpu = torch.cuda.is_available()
 
 # parameter
-epochs = 10
+epochs = 300
+pre_epoch = 0
 batch_size = 32
-lr = 0.00002
-model_path = 'saved_model0/9net.pt'
+lr = 0.01
+model_path = 'saved_model/classifier.pt'
 save_path = 'saved_model/'
 data_path = 'data/train'
 
 
 train_data = ImageFolder(root=data_path, transform=transforms.Compose([
-    transforms.Grayscale(),
-    transforms.ToTensor()
+    # transforms.Grayscale(),
+    transforms.Resize(380),
+    transforms.RandomHorizontalFlip(),
+    transforms.RandomCrop(360),
+    transforms.RandomRotation(10),
+    transforms.ToTensor(),
+    transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
 ]))
+
 print(train_data.classes)
 train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
 
-model = Net()
+model = classifier(pre_train=True)
+
 if cuda_gpu:
     print('gpu is available')
     model = torch.nn.DataParallel(model, device_ids=gpu).cuda()
 
-try:    
+try:
     model.load_state_dict(torch.load(model_path))
     print('load model successfully')
 except:
     print('cannot find model')
+
 
 criterion = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr)
 
 model.train()
 
-for epoch in range(epochs):
+for epoch in range(pre_epoch, epochs):
     loss_sum = 0
     for batch_n, batch in enumerate(train_loader):
         start_time = time.time()
@@ -64,11 +73,12 @@ for epoch in range(epochs):
         loss_sum += loss.item()
 
         if batch_n % 10 == 9:
-            print('Epoch: [{}/{}], batch: {}, took: {:.3f}, loss: {:.5f}'.format(
-                epoch, epochs, batch_n, time.time() - start_time, loss_sum / 10))
+            _, pred = torch.max(outputs, 1)
+            correct = (pred == labels).sum().item()
+            print('Epoch: [{}/{}], batch: {}, took: {:.3f}, loss: {:.5f}, Acc: {:.5f}'.format(
+                epoch, epochs, batch_n, time.time() - start_time, loss_sum / 10, correct / labels.size(0)))
             loss_sum = 0
 
-    torch.save(model.state_dict(), save_path+str(epoch)+'net.pt')
+    if epoch % 5 == 4:
+        torch.save(model.state_dict(), save_path+str(epoch)+'classifier.pt')
 
-
-    
