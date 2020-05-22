@@ -21,6 +21,38 @@ def classifier(pre_train):
     return model
 
 
+def makeRibTracerObserveNet(params):
+    conv = torch.nn.Sequential()
+    conv.add_module("conv1", torch.nn.Conv2d(
+        in_channels=1, out_channels=16, stride=2, kernel_size=5, padding=2))  # (16, 100)
+    conv.add_module("relu1", torch.nn.ReLU())
+    # self.conv.add_module("dropout2d1", torch.nn.Dropout2d(0.2))
+    conv.add_module(
+        "maxpool1", torch.nn.MaxPool2d(kernel_size=2))  # (16, 50)
+
+    conv.add_module("conv2", torch.nn.Conv2d(
+        in_channels=16, out_channels=32, stride=1, kernel_size=5))  # (32, 46)
+    conv.add_module("relu2", torch.nn.ReLU())
+    # self.conv.add_module("dropout2d2", torch.nn.Dropout2d(0.2))
+    conv.add_module(
+        "maxpool2", torch.nn.MaxPool2d(kernel_size=2))  # (32, 23)
+
+    conv.add_module("conv3", torch.nn.Conv2d(
+        in_channels=32, out_channels=64, kernel_size=4))  # (64, 20)
+    conv.add_module("relu3", torch.nn.ReLU())
+    # self.conv.add_module("dropout2d3", torch.nn.Dropout2d(0.2))
+    conv.add_module(
+        "maxpool3", torch.nn.MaxPool2d(kernel_size=2))  # (64, 10)
+
+    conv.add_module("Flatten", torch.nn.Flatten())
+
+    conv.add_module("fc1", torch.nn.Linear(
+        64*int((params.regionSize / 16 - 5/2) ** 2), 50))  # (50)
+    conv.add_module("relu4", torch.nn.ReLU())  # (50)
+    conv.add_module("dropout1", torch.nn.Dropout(0.2))
+
+    return conv
+
 
 class RibTracer(torch.nn.Module):
     def __init__(self, params):
@@ -28,37 +60,12 @@ class RibTracer(torch.nn.Module):
 
         self.params = params
 
-        self.conv = torch.nn.Sequential()
-        self.conv.add_module("conv1", torch.nn.Conv2d(
-            in_channels=1, out_channels=16, stride=2, kernel_size=5, padding=2))  # (16, 100)
-        self.conv.add_module("relu1", torch.nn.ReLU())
-        # self.conv.add_module("dropout2d1", torch.nn.Dropout2d(0.2))
-        self.conv.add_module(
-            "maxpool1", torch.nn.MaxPool2d(kernel_size=2))  # (16, 50)
+        self.conv = makeRibTracerObserveNet(params)
 
-        self.conv.add_module("conv2", torch.nn.Conv2d(
-            in_channels=16, out_channels=32, stride=1, kernel_size=5))  # (32, 46)
-        self.conv.add_module("relu2", torch.nn.ReLU())
-        # self.conv.add_module("dropout2d2", torch.nn.Dropout2d(0.2))
-        self.conv.add_module(
-            "maxpool2", torch.nn.MaxPool2d(kernel_size=2))  # (32, 23)
-
-        self.conv.add_module("conv3", torch.nn.Conv2d(
-            in_channels=32, out_channels=64, kernel_size=4))  # (64, 20)
-        self.conv.add_module("relu3", torch.nn.ReLU())
-        # self.conv.add_module("dropout2d3", torch.nn.Dropout2d(0.2))
-        self.conv.add_module(
-            "maxpool3", torch.nn.MaxPool2d(kernel_size=2))  # (64, 10)
-
-        self.conv.add_module("Flatten", torch.nn.Flatten())
-
-        self.conv.add_module("fc1", torch.nn.Linear(
-            64*int((self.params.regionSize / 16 - 5/2) ** 2), 50))  # (50)
-        self.conv.add_module("relu4", torch.nn.ReLU())  # (50)
-        self.conv.add_module("dropout1", torch.nn.Dropout(0.2))
+        self.predict = torch.nn.Sequential()
         last_linear = torch.nn.Linear(50, 2)
-        self.conv.add_module("fc2", last_linear)  # (2)
-        self.conv.add_module("sigmoid", torch.nn.Sigmoid())
+        self.predict.add_module("fc2", last_linear)  # (2)
+        self.predict.add_module("sigmoid", torch.nn.Sigmoid())
 
         self.apply(self.weights_init)
         torch.nn.init.xavier_uniform_(
@@ -66,6 +73,7 @@ class RibTracer(torch.nn.Module):
 
     def forward(self, image):
         x = self.conv(image)
+        x = self.predict(x)
         return x
 
     @staticmethod
