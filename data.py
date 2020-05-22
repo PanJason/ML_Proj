@@ -137,3 +137,63 @@ class RibTraceDataset(torch.utils.data.IterableDataset):
                 math.ceil(self.file_cnt / float(worker_info.num_workers)))
             worker_id = worker_info.id
             return self.gen_data(worker_id * per_worker, min((worker_id+1) * per_worker, self.file_cnt))
+
+
+class RibTraceDDPGDataset(torch.utils.data.IterableDataset):
+    def __init__(self, dataset, anno_path, params, augment=False):
+        super(RibTraceDDPGDataset, self).__init__()
+        self.params = params
+        self.dataset = dataset
+        self.sampleRate = params.tracerSampleRate
+        self.augment = augment
+
+        self.anno_path = anno_path
+        with open(self.anno_path, "r") as file:
+            self.anno = json.load(file)["poly"]
+
+        self.annoted_id = list(self.anno.keys())
+        if augment:
+            random.shuffle(self.annoted_id)
+        self.annoted_files = [
+            (self.dataset + "/" + s + ".png")
+            for s in self.annoted_id
+        ]
+        self.file_cnt = len(self.annoted_files)
+
+        self.regionSize = params.regionSize
+        self.width = params.regionSize
+        self.height = params.regionSize
+
+    def gen_data(self, start, end):
+        for i in range(start, end):
+            image = Image.open(self.annoted_files[i])
+
+            C = np.array([self.params.imageSize/2, self.params.imageSize/2])
+            for poly in self.anno[self.annoted_id[i]][1:]:
+                poly = np.array(poly)
+                if self.augment:
+                    angle = random.uniform(-180, 180)
+                    img = TransFunc.rotate(
+                        image, angle, resample=Image.BILINEAR)
+                    angle = -angle / 180.0 * math.pi
+                    for i in range(len(poly)):
+                        t = poly[i] - C
+                        t = np.array([math.cos(angle) * t[0] - math.sin(angle) * t[1],
+                                      math.sin(angle) * t[0] + math.cos(angle) * t[1]])
+                        poly[i] = C + t
+                else:
+                    img = image
+
+                img = torchvision.transforms.Pad(int(self.regionSize/2))(img)
+                img = torchvision.transforms.ToTensor()(img)
+                yield img, poly
+
+    def __iter__(self):
+        worker_info = torch.utils.data.get_worker_info()
+        if worker_info is None:  # single-process data loading, return the full iterator
+            return self.gen_data(0, self.file_cnt)
+        else:  # in a worker process
+            per_worker = int(
+                math.ceil(self.file_cnt / float(worker_info.num_workers)))
+            worker_id = worker_info.id
+            return self.gen_data(worker_id * per_worker, min((worker_id+1) * per_worker, self.file_cnt))
