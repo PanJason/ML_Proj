@@ -10,6 +10,7 @@ import option
 import data
 import model
 import view
+from vertebraLandmark import spineFinder
 
 import numpy as np
 from PIL import Image
@@ -52,7 +53,6 @@ def ribTraceDDPG(img, ribTracer, start, direction, params):
     x = np.array(start)
     w, h = img.size
     img = torchvision.transforms.Pad(int(params.regionSize/2))(img)
-    img = torchvision.transforms.ToTensor()(img)
     _, track = ribTracer.play(img, np.array([start]), direction, False)
     return track
 
@@ -94,9 +94,51 @@ def showRibTraceTrackDDPG(imgPath, polys, params):
     cv.waitKey(0)
 
 
+def findSpine(params):
+    network = spineFinder.Network(params)
+    return network.test(params)
+
+
+def findRibs(params):
+    with open(os.path.join(params.median, "spine.json"), "r") as file:
+        spines = json.load(file)
+    ribTracer = model.RibTracer(params)
+    d = torch.load(os.path.join(params.model_path, "ribTracer.pt"))
+    ribTracer.load_state_dict(d)
+    ribTracer.eval()
+
+    files = os.listdir(params.data_set)
+    result = {}
+    for i, file in enumerate(files):
+        file_id = file.split('.')[0]
+        print(f"Tracing on image file ({i+1}/{len(files)}): {file}")
+        img = Image.open(os.path.join(params.data_set, file))
+        tracks = []
+        for box in spines[file_id]:
+            box = np.array(box)
+            track = ribTrace(img, ribTracer, box[1], box[1] - box[2], params)
+            track = [i.tolist() for i in track]
+            tracks.append(track)
+            track = ribTrace(img, ribTracer, box[2], box[2] - box[1], params)
+            track = [i.tolist() for i in track]
+            tracks.append(track)
+        result[file_id] = tracks
+    with open(os.path.join(params.median, "ribs.json"), "w") as file:
+        json.dump(result, file, indent=4)
+    return result
+
+
 if __name__ == "__main__":
     params = option.read()
-    with open("additional_anno/additional_anno_val.json", "r") as file:
-        anno = json.load(file)
-    showRibTraceTrackDDPG("data/fracture/val_processed/101.png",
-                          anno["poly"]["101"][1:], params)
+    if params.testTarget == "ribTracerDDPG":
+        with open("additional_anno/additional_anno_val.json", "r") as file:
+            anno = json.load(file)
+        showRibTraceTrackDDPG("data/fracture/val_processed/101.png",
+                              anno["poly"]["101"][1:], params)
+    elif params.testTarget == "spine":
+        view.showSpine("101")
+    elif params.testTarget == "ribs":
+        # findRibs(params)
+        files = os.listdir(params.data_set)
+        for f in files:
+            view.showRibs(f.split('.')[0])

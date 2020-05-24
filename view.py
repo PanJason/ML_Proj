@@ -29,6 +29,13 @@ def drawPoly(img, poly, color, number):
                    cv.FONT_HERSHEY_SIMPLEX, 1, color)
 
 
+def drawSpine(img, pts):
+    for box in pts:
+        color = randomColor()
+        for p in box:
+            cv.circle(img, (int(p[0]), int(p[1])), 4, color, -1, 1)
+
+
 def randomColor():
     return (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
 
@@ -80,6 +87,50 @@ def showImage(imgID, imgPath=None, annoPath=None, additionalAnno=None):
                 drawPoly(img, p, color, i+1)
                 color = (random.randint(0, 255), random.randint(
                     0, 255), random.randint(0, 255))
+
+    cv.imshow("Display", img)
+    cv.waitKey(0)
+
+
+def showSpine(imgID):
+    imgPath = params.data_set + "/" + str(imgID) + ".png"
+
+    img = cv.imread(imgPath)
+    with open(path.join(params.median, "spine.json"), "r") as file:
+        anno = json.load(file)
+
+    pts = anno[str(imgID)]
+    pts = np.array(pts)
+    img, hscale, wscale = scaling(img)
+    pts *= [wscale, hscale]
+    drawSpine(img, pts)
+
+    cv.imshow("Display", img)
+    cv.waitKey(0)
+
+def showRibs(imgID):
+    imgPath = params.data_set + "/" + str(imgID) + ".png"
+
+    img = cv.imread(imgPath)
+    img, hscale, wscale = scaling(img)
+    with open(path.join(params.median, "spine.json"), "r") as file:
+        anno = json.load(file)
+
+    pts = anno[str(imgID)]
+    pts = np.array(pts)
+    pts *= [wscale, hscale]
+    drawSpine(img, pts)
+
+    with open(path.join(params.median, "ribs.json"), "r") as file:
+        anno = json.load(file)
+
+    polys = anno[str(imgID)]
+    for i, poly in enumerate(polys):
+        poly = [
+            (int(i[0] * wscale), int(i[1] * hscale))
+            for i in poly
+        ]
+        drawPoly(img, poly, randomColor(), i+1)
 
     cv.imshow("Display", img)
     cv.waitKey(0)

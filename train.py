@@ -154,13 +154,12 @@ def trainRibTracerDDPG(params):
         cnt = 0
         ribTracer.train()
         for img, poly in trainDataset:
-            if params.useGPU:
-                img = img.cuda()
             reward, track = ribTracer.play(img, poly, poly[1] - poly[0], True)
             if cnt % 20 == 0:
                 vloss = ribTracer.total_value_loss.cpu().numpy() / ribTracer.update_cnt
                 ploss = ribTracer.total_policy_loss.cpu().numpy() / ribTracer.update_cnt
-                print(f"Batch {cnt}: Reward {reward} Len {len(track)} VLoss{vloss} PLoss{ploss} {timer()}")
+                print(
+                    f"Batch {cnt}: Reward {reward} Len {len(track)} VLoss{vloss} PLoss{ploss} {timer()}")
             total_reward += reward
             total_len += len(track)
             cnt += 1
@@ -170,8 +169,6 @@ def trainRibTracerDDPG(params):
         test_len = 0
         test_cnt = 0
         for img, poly in valDataset:
-            if params.useGPU:
-                img = img.cuda()
             reward, track = ribTracer.play(img, poly, poly[1] - poly[0], False)
             test_reward += reward
             test_len += len(track)

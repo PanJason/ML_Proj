@@ -185,7 +185,7 @@ class RibTraceDDPGDataset(torch.utils.data.IterableDataset):
                     img = image
 
                 img = torchvision.transforms.Pad(int(self.regionSize/2))(img)
-                img = torchvision.transforms.ToTensor()(img)
+                # img = torchvision.transforms.ToTensor()(img)
                 yield img, poly
 
     def __iter__(self):
@@ -197,3 +197,24 @@ class RibTraceDDPGDataset(torch.utils.data.IterableDataset):
                 math.ceil(self.file_cnt / float(worker_info.num_workers)))
             worker_id = worker_info.id
             return self.gen_data(worker_id * per_worker, min((worker_id+1) * per_worker, self.file_cnt))
+
+
+def rearrange_pts(pts):
+    boxes = []
+    for k in range(0, len(pts), 4):
+        pts_4 = pts[k:k+4, :]
+        x_inds = np.argsort(pts_4[:, 0])
+        pt_l = np.asarray(pts_4[x_inds[:2], :])
+        pt_r = np.asarray(pts_4[x_inds[2:], :])
+        y_inds_l = np.argsort(pt_l[:, 1])
+        y_inds_r = np.argsort(pt_r[:, 1])
+        tl = pt_l[y_inds_l[0], :]
+        bl = pt_l[y_inds_l[1], :]
+        tr = pt_r[y_inds_r[0], :]
+        br = pt_r[y_inds_r[1], :]
+        # boxes.append([tl, tr, bl, br])
+        boxes.append(tl)
+        boxes.append(tr)
+        boxes.append(bl)
+        boxes.append(br)
+    return np.asarray(boxes, np.float32)

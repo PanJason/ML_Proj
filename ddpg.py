@@ -21,7 +21,7 @@ def weights_init(m):
             m.weight.data, torch.nn.init.calculate_gain("relu"))
     elif classname.find('BatchNorm') != -1 or classname.find('Linear') != -1:
         torch.nn.init.xavier_normal_(
-            m.weight.data, torch.nn.init.calculate_gain("relu"))
+            m.weight.data, torch.nn.init.calculate_gain("sigmoid"))
         torch.nn.init.constant_(m.bias.data, 0)
     elif classname == "LSTMCell":
         for name, param in m._parameters.items():
@@ -37,9 +37,9 @@ class RibTracerActor(torch.nn.Module):
         self.rnn = torch.nn.LSTMCell(2, params.DDPGHiddenSize)
         self.outNet = torch.nn.Sequential(
             torch.nn.Linear(params.DDPGHiddenSize + 50, 32),
-            torch.nn.ReLU(),
+            torch.nn.Sigmoid(),
             torch.nn.Linear(32, 8),
-            torch.nn.ReLU(),
+            torch.nn.Sigmoid(),
             torch.nn.Linear(8, 2),
             torch.nn.Sigmoid()
         )
@@ -55,7 +55,7 @@ class RibTracerCritic(torch.nn.Module):
         super(RibTracerCritic, self).__init__()
         self.linear1 = torch.nn.Sequential(
             torch.nn.Linear(50, 16),
-            torch.nn.ReLU()
+            torch.nn.Sigmoid()
         )
         self.linear2 = torch.nn.Sequential(
             torch.nn.Linear(params.DDPGHiddenSize * 2, 32),
@@ -63,11 +63,11 @@ class RibTracerCritic(torch.nn.Module):
         )
         self.linear3 = torch.nn.Sequential(
             torch.nn.Linear(36, 16),
-            torch.nn.ReLU()
+            torch.nn.Sigmoid()
         )
         self.bilinear = torch.nn.Bilinear(16, 16, 8)
         self.predict = torch.nn.Sequential(
-            torch.nn.ReLU(),
+            torch.nn.Sigmoid(),
             torch.nn.Linear(8, 1),
         )
 
@@ -105,13 +105,14 @@ class RibTracerDDPG:
         RibTracerDDPG.hardUpdate(self.actor, self.actor_target)
         RibTracerDDPG.hardUpdate(self.critic, self.critic_target)
 
-        self.criticLoss = torch.nn.MSELoss()
+        self.criticLoss = torch.nn.SmoothL1Loss()
 
         self.actorOptim = torch.optim.Adam(
             self.actor.parameters(), self.params.actorLearningRate)
         self.criticOptim = torch.optim.Adam(
             self.critic.parameters(), self.params.criticLearningRate)
 
+        self.epsilon = 0.0
         self.resetState()
 
     def cuda(self):
@@ -128,7 +129,6 @@ class RibTracerDDPG:
 
     def play(self, img, poly, direction, training=False):
         self.resetState()
-        batchSize = img.shape[0]
         pos = poly[0]
         pos = np.clip(pos, 0, self.params.imageSize)
         embeds = self.observe(img, pos)
@@ -137,14 +137,15 @@ class RibTracerDDPG:
         if self.params.useGPU:
             actorState = (actorState[0].cuda(),
                           actorState[1].cuda())
-        epsilon = 1.0
         track = [deepcopy(pos)]
         total_reward = 0.0
         cnt = 0
+        if training and len(self.buffer) >= self.params.warmUpSize:
+            self.epsilon += self.params.DDPGepsilonDelta
         for i in range(self.params.maxSteps):
             tpos = torch.tensor(pos/self.params.imageSize, dtype=torch.float)
             if self.params.useGPU:
-                tpos.cuda()
+                tpos = tpos.cuda()
             cnt += 1
             with torch.no_grad():
                 act, nextActorState = self.actor(
@@ -153,8 +154,7 @@ class RibTracerDDPG:
                     if len(self.buffer) <= self.params.warmUpSize:
                         act = self.randomDir()
                     else:
-                        epsilon -= self.params.DDPGepsilonDec
-                        act += self.OU() * max(epsilon, 0)
+                        act += self.OU() * math.exp(-self.epsilon)
                         act = act.clamp(0.0, 1.0)
 
             if self.params.useGPU:
@@ -180,7 +180,7 @@ class RibTracerDDPG:
                     [reward * self.params.rewardScale], dtype=torch.float)
 
                 unfin = torch.tensor(
-                    [i != self.params.maxSteps - 1 or failed], dtype=torch.int)
+                    [i != self.params.maxSteps - 1 and not failed], dtype=torch.int)
 
                 if self.params.useGPU:
                     reward = reward.cuda()
@@ -190,8 +190,7 @@ class RibTracerDDPG:
                     tnextPos = torch.tensor(
                         nextPos/self.params.imageSize, dtype=torch.float)
                     if self.params.useGPU:
-                        tpos.cuda()
-                        tnextPos.cuda()
+                        tnextPos = tnextPos.cuda()
                     self.buffer.append(
                         (embeds, act, nextEmbeds, actorState,
                          nextActorState, reward, unfin,
@@ -199,7 +198,8 @@ class RibTracerDDPG:
                     if len(self.buffer) > self.params.maxBuffer:
                         self.buffer.popleft()
                     if len(self.buffer) > self.params.warmUpSize:
-                        self.update()
+                        for c in range(self.params.updateTimes):
+                            self.update()
 
                 if failed:
                     break
@@ -209,7 +209,8 @@ class RibTracerDDPG:
             track.append(deepcopy(pos))
         if training and len(self.buffer) > self.params.warmUpSize:
             for i in range(max(self.params.maxSteps - cnt, 0)):
-                self.update()
+                for c in range(self.params.updateTimes):
+                    self.update()
         return total_reward, track
 
     def update(self):
@@ -228,6 +229,8 @@ class RibTracerDDPG:
         value_loss = self.criticLoss(QValue, targetQValue)
         value_loss.backward()
 
+        for p in self.critic.parameters():
+            p.grad.data.clamp_(min=-0.5, max=0.5)
         self.criticOptim.step()
 
         self.actor.zero_grad()
@@ -237,6 +240,8 @@ class RibTracerDDPG:
         policy_loss = policy_loss.mean()
         policy_loss.backward()
 
+        for p in self.actor.parameters():
+            p.grad.data.clamp_(min=-0.5, max=0.5)
         self.actorOptim.step()
 
         self.softUpdate(self.actor, self.actor_target)
@@ -276,15 +281,14 @@ class RibTracerDDPG:
             speedReward = maxSpeed - (speed - maxSpeed) ** 2
             return cos*speedReward + d - d1
         else:
-            reward = 300 if idx1 == idx+1 else -300
             maxSpeed = self.params.regionSize / 2
             speedReward = maxSpeed - (speed - maxSpeed) ** 2
-            return reward + speedReward - d1
+            return speedReward + d - d1
 
     @staticmethod
     def findClosest(poly, point):
         dists = [
-            RibTracerDDPG.pointToLine(poly[i], poly[i+1], point)
+            RibTracerDDPG.pointToLine(point, poly[i], poly[i+1])
             for i in range(len(poly)-1)
         ]
         return np.argmin(dists)
@@ -316,13 +320,14 @@ class RibTracerDDPG:
         return x
 
     def observe(self, img, pos):
-        w, h = img.shape[1:]
-
-        x = img.narrow(2, int(pos[0]), self.params.regionSize)
-        x = x.narrow(1, int(pos[1]), self.params.regionSize)
+        x = TTF.crop(img, int(pos[1]), int(
+            pos[0]), self.params.regionSize, self.params.regionSize)
+        x = torchvision.transforms.ToTensor()(x)
 
         croped = torch.reshape(
             x, [1, 1, self.params.regionSize, self.params.regionSize])
+        if self.params.useGPU:
+            croped = croped.cuda()
         with torch.no_grad():
             result = self.observer(croped)
         return result
