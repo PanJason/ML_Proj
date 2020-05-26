@@ -10,6 +10,8 @@ import option
 import data
 import model
 import view
+import IOU
+from utility import Timer
 from vertebraLandmark import spineFinder
 
 import numpy as np
@@ -31,11 +33,12 @@ def ribTrace(img, ribTracer, start, direction, params):
             img, int(x[1]), int(x[0]), params.regionSize, params.regionSize)
         region = torchvision.transforms.ToTensor()(region)
         region = region.view([1, 1, params.regionSize, params.regionSize])
-        if params.useGPU:
-            region = region.cuda()
+        # if params.useGPU:
+        # region = region.cuda()
 
         with torch.no_grad():
-            delta = ribTracer(region).numpy()[0]
+            delta = ribTracer(region)
+        delta = delta.cpu().numpy()[0]
         delta[1] = delta[1] * 2.0 - 1.0
         delta = delta * params.regionSize * math.sqrt(2) / 2 * params.traceStep
         if np.dot(delta, direction) < 0:
@@ -106,6 +109,8 @@ def findRibs(params):
     d = torch.load(os.path.join(params.model_path, "ribTracer.pt"))
     ribTracer.load_state_dict(d)
     ribTracer.eval()
+    # if params.useGPU:
+    # ribTracer = ribTracer.cuda()
 
     files = os.listdir(params.data_set)
     result = {}
@@ -128,6 +133,183 @@ def findRibs(params):
     return result
 
 
+def findFractureClassifier(params):
+    with open(os.path.join(params.median, "ribs.json"), "r") as file:
+        ribs = json.load(file)
+    dataset = data.ClassifierTestDataset(params.data_set, ribs, params)
+
+    # classifier = model.classifier(False, os.path.join(
+    # params.model_path, "resnet34-333f7ec4.pth"))
+    classifier = model.classifier(False)
+    classifier = torch.nn.DataParallel(classifier, device_ids=[0])
+    if params.useGPU:
+        classifier = classifier.cuda()
+    d = torch.load(os.path.join(params.model_path, "classifier.pt"))
+    # d1 = torch.load()
+    # d.update(d1)
+    classifier.load_state_dict(d)
+
+    classifier.eval()
+    detected = []
+    cnt = 0
+    timer = Timer()
+    for batch, centers, imgIDs in torch.utils.data.DataLoader(dataset,
+                                                              batch_size=params.batchSize,
+                                                              pin_memory=True,
+                                                              num_workers=0):
+        cnt += 1
+        if params.useGPU:
+            batch = batch.cuda()
+        with torch.no_grad():
+            output = classifier(batch)
+            output = torch.nn.functional.softmax(output, 1)
+        output = output.cpu().numpy()
+        centers = centers.numpy()
+        imgIDs = imgIDs.numpy()
+        for i in range(output.shape[0]):
+            out = output[i]
+            if out[1] > params.detectThreshold:
+                detected.append((centers[i], imgIDs[i], out[1]))
+        if cnt % 100 == 0:
+            print(f"Batch {cnt} {timer()}")
+
+    with open(params.anno_path, "r") as file:
+        anno = json.load(file)
+    anno["annotations"] = []
+    regionSize = params.detectRegionSize
+    for i, d in enumerate(detected):
+        center, imgID, score = d
+        anno["annotations"].append(
+            {
+                "bbox": [
+                    float(center[0]) - regionSize / 2,
+                    float(center[1]) - regionSize / 2,
+                    regionSize,
+                    regionSize
+                ],
+                "id": i,
+                "image_id": int(imgID),
+                "score": score
+            }
+        )
+    with open(os.path.join(params.median, "detection.json"), "w") as file:
+        json.dump(anno, file, indent=4)
+
+
+def bboxIntersect(A, B):
+    ax1 = A[0]
+    ay1 = A[1]
+    ax2 = A[0] + A[2]
+    ay2 = A[1] + A[3]
+    bx1 = B[0]
+    by1 = B[1]
+    bx2 = B[0] + B[2]
+    by2 = B[1] + B[3]
+    x1 = max(ax1, bx1)
+    y1 = max(ay1, by1)
+    x2 = min(ax2, bx2)
+    y2 = min(ay2, by2)
+    return [x1, y1, x2-x1, y2-y1]
+
+
+def bboxUnion(A, B):
+    ax1 = A[0]
+    ay1 = A[1]
+    ax2 = A[0] + A[2]
+    ay2 = A[1] + A[3]
+    bx1 = B[0]
+    by1 = B[1]
+    bx2 = B[0] + B[2]
+    by2 = B[1] + B[3]
+    x1 = min(ax1, bx1)
+    y1 = min(ay1, by1)
+    x2 = max(ax2, bx2)
+    y2 = max(ay2, by2)
+    return [x1, y1, x2-x1, y2-y1]
+
+
+def postProcess(params):
+    with open(os.path.join(params.median, "detection.json"), "r") as file:
+        anno = json.load(file)
+    intersect = None
+    lastID = -1
+    sum_score = 0.0
+    cnt = 0
+    result = []
+    for box in anno["annotations"]:
+        bbox = box["bbox"]
+        imgID = box["image_id"]
+        score = box["score"]
+        if lastID != imgID:
+            if intersect is not None:
+                result.append((intersect, lastID, sum_score / cnt))
+            lastID = imgID
+            intersect = bbox
+            sum_score = score
+            cnt = 1
+        else:
+            I = bboxIntersect(bbox, intersect)
+            if I[2] > 0 and I[3] > 0:
+                intersect = I
+                cnt += 1
+                sum_score += score
+            else:
+                result.append((intersect, lastID, sum_score / cnt))
+                intersect = bbox
+                cnt = 1
+
+    widths = {}
+    heights = {}
+    for item in anno["images"]:
+        widths[item["id"]] = item["width"]
+        heights[item["id"]] = item["height"]
+
+    result = [(bbox, imgID, score) for bbox, imgID, score in result
+              if (0 <= bbox[0] <= widths[imgID] and 0 <= bbox[1] <= heights[imgID] and
+                  8000 <= bbox[2] * bbox[3] <= 22500)]
+
+    res = []
+    for i, d in enumerate(result):
+        bbox, imgID, score = d
+        res.append(
+            {
+                "image_id": imgID,
+                "category_id": 1,
+                "bbox": bbox,
+                "score": score
+            }
+        )
+    with open(params.output_path, "w") as file:
+        json.dump(res, file, indent=4)
+
+
+def calcAP50(params):
+    with open(params.output_path, "r") as file:
+        predict = json.load(file)
+    with open(params.anno_path, "r") as file:
+        target = json.load(file)
+
+    gt = {}
+    for b in target["annotations"]:
+        box = b["bbox"]
+        if b["id"] in gt:
+            gt[b["id"]].append(box)
+        else:
+            gt[b["id"]] = [box]
+
+    pr = {}
+    for b in predict["annotations"]:
+        box = b["bbox"]
+        score = b["score"]
+        if b["id"] in pr:
+            pr[b["id"]]["boxes"].append(box)
+            pr[b["id"]]["scores"].append(score)
+        else:
+            pr[b["id"]] = {"boxes": [box], "scores": [score]}
+
+    print(IOU.get_avg_precision_at_iou(gt, pr))
+
+
 if __name__ == "__main__":
     params = option.read()
     if params.testTarget == "ribTracerDDPG":
@@ -138,7 +320,13 @@ if __name__ == "__main__":
     elif params.testTarget == "spine":
         view.showSpine("101")
     elif params.testTarget == "ribs":
-        # findRibs(params)
-        files = os.listdir(params.data_set)
-        for f in files:
-            view.showRibs(f.split('.')[0])
+        findRibs(params)
+        # files = os.listdir(params.data_set)
+        # for f in files:
+        # view.showRibs(f.split('.')[0])
+    elif params.testTarget == "fracture":
+        findFractureClassifier(params)
+    elif params.testTarget == "postProcess":
+        postProcess(params)
+    elif params.testTarget == "AP50":
+        calcAP50(params)

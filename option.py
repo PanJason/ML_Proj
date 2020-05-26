@@ -48,7 +48,7 @@ def read():
                         help='Samples per pixel use in tracer')
     parser.add_argument('--regionShiftSigma', default=20.0, type=float,
                         help='Sigma for gaussians used in region shifting')
-    parser.add_argument('--maxTrace', default=30, type=int,
+    parser.add_argument('--maxTrace', default=20, type=int,
                         help="Maximum number of regions selected by a single trace")
     parser.add_argument('--traceStep', default=0.5, type=float,
                         help="Step of each trace sample")
@@ -115,6 +115,13 @@ def read():
                         default='../../Datasets/spinal/', help='data directory')
     parser.add_argument('--phase', type=str,
                         default='test', help='data directory')
+
+    parser.add_argument('--detectRate', type=float, default=20,
+                        help="Pixels per sample in detection")
+    parser.add_argument('--detectRegionSize', type=int, default=360,
+                        help="RegionSize in detection")
+    parser.add_argument('--detectThreshold', type=float, default=0.8,
+                        help="Threshold used in detection")
 
     parsed = parser.parse_args()
 
