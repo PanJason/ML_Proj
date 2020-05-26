@@ -215,13 +215,77 @@ class VAEDataset(torch.utils.data.IterableDataset):
 
     def gen_data(self, start, end):
         for i in range(start, end):
-            image = Image.open(os.path.join(self.params.data_set, self.files[i]))
+            image = Image.open(os.path.join(
+                self.params.data_set, self.files[i]))
             image = torchvision.transforms.Pad(int(self.regionSize/2))(image)
             for k in range(self.params.VAESamples):
-                pos = (random.randint(0, self.params.imageSize), random.randint(0, self.params.imageSize))
-                img = torchvision.transforms.functional.crop(image, pos[0], pos[1], self.regionSize, self.regionSize)
+                pos = (random.randint(0, self.params.imageSize),
+                       random.randint(0, self.params.imageSize))
+                img = torchvision.transforms.functional.crop(
+                    image, pos[0], pos[1], self.regionSize, self.regionSize)
                 img = torchvision.transforms.ToTensor()(img)
                 yield img
+
+    def __iter__(self):
+        worker_info = torch.utils.data.get_worker_info()
+        if worker_info is None:  # single-process data loading, return the full iterator
+            return self.gen_data(0, self.file_cnt)
+        else:  # in a worker process
+            per_worker = int(
+                math.ceil(self.file_cnt / float(worker_info.num_workers)))
+            worker_id = worker_info.id
+            return self.gen_data(worker_id * per_worker, min((worker_id+1) * per_worker, self.file_cnt))
+
+
+class ClassifierTestDataset(torch.utils.data.IterableDataset):
+    def __init__(self, dataset, anno, params):
+        super(ClassifierTestDataset, self).__init__()
+        self.params = params
+        self.sampleRate = params.detectRate
+        self.anno = anno
+
+        self.files = os.listdir(dataset)
+        self.file_cnt = len(self.files)
+        self.ids = [i.split('.')[0] for i in self.files]
+        self.files = [os.path.join(dataset, i) for i in self.files]
+
+        self.regionSize = params.detectRegionSize
+
+    def gen_data(self, start, end):
+        for i in range(start, end):
+            image = Image.open(self.files[i])
+            image = image.convert("RGB")
+            image = torchvision.transforms.Pad(int(self.regionSize/2))(image)
+            point_chunks = []
+            for poly in self.anno[self.ids[i]]:
+                poly = np.array(poly)
+                point_chunks.append(self.samplePoints(poly, self.ids[i]))
+            for point in itertools.chain(*point_chunks):
+                yield self.getRegion(image, point)
+
+    def samplePoints(self, poly, imgID):
+        points = []
+        for i in range(0, len(poly)-1):
+            length = np.linalg.norm(poly[i] - poly[i+1])
+            sample_cnt = int(length / self.sampleRate)
+            samples = [(
+                (poly[i+1] * (j/sample_cnt) + poly[i] * (1-(j/sample_cnt))),
+                imgID
+            )
+                for j in range(sample_cnt)]
+            points.append(samples)
+        return itertools.chain(*points)
+
+    def getRegion(self, image, info):
+        center, imgID = info
+        imgID = int(imgID)
+        region = TransFunc.crop(
+            image, center[1], center[0], self.regionSize, self.regionSize)
+
+        region = torchvision.transforms.ToTensor()(region)
+        center = torch.tensor(center, dtype=float)
+        imgID = torch.tensor(imgID, dtype=int)
+        return region, center, imgID
 
     def __iter__(self):
         worker_info = torch.utils.data.get_worker_info()

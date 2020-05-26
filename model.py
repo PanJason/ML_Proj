@@ -2,6 +2,7 @@
 
 import numpy as np
 import torch
+import torch.nn as nn
 import os
 from torch.autograd import Variable
 import option
@@ -11,8 +12,12 @@ from torchvision.models.resnet import *
 sizen = 360
 
 
-def classifier(pre_train):
-    model = resnet34(pretrained=pre_train)
+def classifier(pre_train, path=None):
+    if path is None:
+        model = resnet34(pretrained=pre_train)
+    else:
+        model = resnet34(False)
+        model.load_state_dict(torch.load(path))
     model.avgpool = torch.nn.AdaptiveAvgPool2d((1, 1))
     model.fc = torch.nn.Sequential(
         torch.nn.BatchNorm1d(512),
