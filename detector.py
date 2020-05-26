@@ -1,4 +1,4 @@
-from models import *  # set ONNX_EXPORT in models.py
+from model import *  # set ONNX_EXPORT in models.py
 from utils.datasets import *
 from utils.utils import *
 import torch
@@ -6,13 +6,14 @@ import cv2
 import numpy as np
 
 
-def detectFracture(img, cfg='cfg/yolov3-tiny3-1cls.cfg', weights='weights/detector.pt', half=False,
+def detectFracture(img, cfg='cfg/yolov3-tiny3-1cls.cfg', weights='saved_model/detector.pt', half=False,
                    augment=True, conf_thres=0.5, iou_thres=0.5, agnostic_nms=False):
     '''
     :param img: a list of images of size (H, W, C), or an image of size (H, W, C)
     :return: a dict describing the bbox in each image
         if the ith image do not have an output of bboxes, i is not in dict
-        else dict[i] is the max confidence bbox in ith image, [xmin, ymin, weight, height]
+        else dict[i] is a dict
+        { 'bbox': [xmin, ymin, width, height] (all [0, 1]), 'score': confidence }
     '''
     imgsz = 416
     for i in range(len(img)):
@@ -63,11 +64,13 @@ def detectFracture(img, cfg='cfg/yolov3-tiny3-1cls.cfg', weights='weights/detect
         # select max confidence
         max_score = 0
         for p, b in zip(pred.tolist(), box.tolist()):
-            bbox = [round(x / imgsz, 5) for x in b]
-            score = round(p[4], 5)
-            if score > max_score:
-                max_score = score
-                pred_dict[i] = bbox
+            d = {
+                'bbox': [round(x / imgsz, 5) for x in b],
+                'score': round(p[4], 5)
+            }
+            if d['score'] > max_score:
+                max_score = d['score']
+                pred_dict[i] = d
 
     return pred_dict
 
