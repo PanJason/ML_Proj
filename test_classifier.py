@@ -1,3 +1,6 @@
+# test classifier
+
+import numpy as np
 import torch
 import torchvision
 from torchvision import transforms
@@ -17,6 +20,8 @@ model = classifier(pre_train=False)
 if cuda_gpu:
     print('gpu is available')
     model = torch.nn.DataParallel(model, device_ids=gpu).cuda()
+else:
+    model = torch.nn.DataParallel(model)
 
 try:
     model.load_state_dict(torch.load(model_path))
@@ -25,13 +30,13 @@ except:
     print('cannot find model')
 
 model.eval()
+
 testset = torchvision.datasets.ImageFolder(root=test_path, transform=transforms.Compose([
-    # transforms.Grayscale(),
-    transforms.ToTensor(),
-    transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+    transforms.Grayscale(),
+    transforms.ToTensor()
 ]))
 
-test_loader = DataLoader(testset, batch_size=32, shuffle=False)
+test_loader = DataLoader(testset, batch_size=4, shuffle=False)
 
 correct = 0
 total_test = 0
