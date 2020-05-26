@@ -63,7 +63,7 @@ def detectFracture(img, cfg='cfg/yolov3-tiny3-1cls.cfg', weights='weights/detect
         # select max confidence
         max_score = 0
         for p, b in zip(pred.tolist(), box.tolist()):
-            bbox = [round(x, 3) for x in b]
+            bbox = [round(x / imgsz, 5) for x in b]
             score = round(p[4], 5)
             if score > max_score:
                 max_score = score
