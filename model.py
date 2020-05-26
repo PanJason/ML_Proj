@@ -102,6 +102,7 @@ def conv1x1(in_planes, out_planes, stride=1):
     """
     return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
 
+
 class BasicBlock(nn.Module):
     '''
     come from https://github.com/pytorch/vision/blob/master/torchvision/models/resnet.py
@@ -114,9 +115,11 @@ class BasicBlock(nn.Module):
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
         if groups != 1 or base_width != 64:
-            raise ValueError('BasicBlock only supports groups=1 and base_width=64')
+            raise ValueError(
+                'BasicBlock only supports groups=1 and base_width=64')
         if dilation > 1:
-            raise NotImplementedError("Dilation > 1 not supported in BasicBlock")
+            raise NotImplementedError(
+                "Dilation > 1 not supported in BasicBlock")
         # Both self.conv1 and self.downsample layers downsample the input when stride != 1
         self.conv1 = conv3x3(inplanes, planes, stride)
         self.bn1 = norm_layer(planes)
@@ -178,7 +181,8 @@ class PlateDetector(nn.Module):
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                nn.init.kaiming_normal_(
+                    m.weight, mode='fan_out', nonlinearity='relu')
             elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
@@ -224,3 +228,40 @@ class PlateDetector(nn.Module):
 
         xAffine = self.affine(x)
         return xProb, xAffine
+
+
+class VAE(torch.nn.Module):
+    def __init__(self, params):
+        super(VAE, self).__init__()
+
+        self.params = params
+
+        self.conv = makeRibTracerObserveNet(params)
+
+        self.linear = torch.nn.Sequential(
+            torch.nn.Linear(50, 6400),
+            torch.nn.ReLU()
+        )
+        self.deconv = torch.nn.Sequential(
+            torch.nn.ConvTranspose2d(
+                64, 32, 5, 2, 2, dilation=2),  # 32, 24, 24
+            # torch.nn.BatchNorm2d(32),
+            torch.nn.ReLU(),
+            torch.nn.ConvTranspose2d(32, 16, 5, 2),  # 16, 49, 49
+            # torch.nn.BatchNorm2d(16),
+            torch.nn.ReLU(),
+            torch.nn.ConvTranspose2d(
+                16, 8, 4, 2),  # 8, 100, 100
+            # torch.nn.BatchNorm2d(8),
+            torch.nn.ReLU(),
+            torch.nn.ConvTranspose2d(
+                8, 1, 4, 2, 1),  # 1, 200, 200
+            torch.nn.Sigmoid()
+        )
+
+    def forward(self, image):
+        x = self.conv(image)
+        x = self.linear(x)
+        x = x.view((-1, 64, 10, 10))
+        x = self.deconv(x)
+        return x

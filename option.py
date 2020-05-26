@@ -33,7 +33,7 @@ def read():
     parser.add_argument('--val_addi_path', default='additional_anno/additional_anno_val.json',
                         type=str, help='Path to the additional val dataset annotation')
 
-    parser.add_argument('--batchSize', default=256, type=int,
+    parser.add_argument('--batchSize', default=32, type=int,
                         help='Batch size')
     parser.add_argument('--numEpochs', default=10, type=int,
                         help='Number of epochs to run')
@@ -48,16 +48,18 @@ def read():
                         help='Samples per pixel use in tracer')
     parser.add_argument('--regionShiftSigma', default=20.0, type=float,
                         help='Sigma for gaussians used in region shifting')
-    parser.add_argument('--maxTrace', default=20, type=int,
+    parser.add_argument('--maxTrace', default=30, type=int,
                         help="Maximum number of regions selected by a single trace")
-    parser.add_argument('--traceStep', default=0.8, type=float,
+    parser.add_argument('--traceStep', default=0.5, type=float,
                         help="Step of each trace sample")
-    parser.add_argument('--actorLearningRate', default=1e-4, type=float,
+    parser.add_argument('--actorLearningRate', default=1e-3, type=float,
                         help='Actor Learning rate')
-    parser.add_argument('--criticLearningRate', default=1e-4, type=float,
+    parser.add_argument('--criticLearningRate', default=1e-3, type=float,
                         help='Critic Learning rate')
 
-    parser.add_argument('--maxSteps', default=10, type=int,
+    parser.add_argument('--VAESamples', default=300, type=int,
+                        help='Samples in one image use in VAE dataset')
+    parser.add_argument('--maxSteps', default=25, type=int,
                         help="Max step inside a DDPG run")
     parser.add_argument('--DDPGHiddenSize', default=100, type=int,
                         help="Hidden size inside rnn of DDPG")
@@ -67,7 +69,7 @@ def read():
                         help="Gamma coefficient in DDPG")
     parser.add_argument('--DDPGepsilonDelta', default=1e-3, type=float,
                         help="Decrease of epsilon coeficcient in DDPG")
-    parser.add_argument('--failReward', default=-10000, type=float,
+    parser.add_argument('--failReward', default=-1000, type=float,
                         help='The reward when failure meets')
     parser.add_argument('--finishReward', default=1000, type=float,
                         help='The reward when finisha trace')
@@ -77,7 +79,7 @@ def read():
                         help="Records needed for warm up in DDPG")
     parser.add_argument('--maxBuffer', default=10000, type=int,
                         help="Max buffer size in DDPG")
-    parser.add_argument('--updateTimes', default=3, type=int,
+    parser.add_argument('--updateTimes', default=1, type=int,
                         help="Updates each time")
     parser.add_argument('--OUtheta', default=0.8, type=float,
                         help="Theta coefficient in OU")

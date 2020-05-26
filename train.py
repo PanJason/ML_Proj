@@ -130,9 +130,74 @@ def trainRibTracer(params):
             params.model_path, "ribTracer.pt"))
 
         print(f"Epoch {epochID}: {timer()} Train: {trainloss} Val: {valloss}")
-    torch.save(ribTracer.conv.state_dict(), os.path.join(
-        params.model_path, "ribTracerObserver.pt"
-    ))
+
+
+def trainVAE(params):
+    trainDataset = data.VAEDataset(params.data_set, params, True)
+    valDataset = data.VAEDataset(params.val_data_set, params, True)
+
+    VAEmodel = model.VAE(params)
+    if params.useGPU:
+        VAEmodel = VAEmodel.cuda()
+    loss_fn = torch.nn.SmoothL1Loss()
+    optimizer = torch.optim.Adam(
+        VAEmodel.parameters(), lr=params.learningRate)
+
+    def calcLoss(dataset):
+        total = 0
+        cnt = 0
+        for batch in DataLoader(dataset,
+                                batch_size=params.batchSize,
+                                pin_memory=True,
+                                num_workers=4):
+            if params.useGPU:
+                batch = batch.cuda()
+            with torch.no_grad():
+                out = VAEmodel(batch)
+                loss = loss_fn(out, batch)
+            l = torch.sum(loss).cpu()
+            total += l
+            cnt += 1
+
+        return float(total) / float(cnt)
+
+    timer = utility.Timer()
+    # torch.autograd.set_detect_anomaly(True)
+    for epochID in range(1, params.numEpochs + 1):
+        print(f"Start Epoch {epochID}")
+        cnt = 0
+        VAEmodel.train()
+        trainloss = 0
+        traintotal = 0
+        for batch in DataLoader(trainDataset,
+                                batch_size=params.batchSize,
+                                pin_memory=True,
+                                num_workers=4):
+            optimizer.zero_grad()
+            if params.useGPU:
+                batch = batch.cuda()
+            out = VAEmodel(batch)
+            loss = loss_fn(out, batch)
+            loss.backward()
+            trainloss += loss.detach().cpu().numpy()
+            traintotal += 1
+            optimizer.step()
+
+            if cnt % 100 == 0:
+                print(f"Batch {cnt}: {loss} {timer()}")
+            cnt += 1
+
+        VAEmodel.eval()
+        trainloss /= traintotal
+        # trainloss = calcLoss(trainDataset)
+        valloss = calcLoss(valDataset)
+
+        torch.save(VAEmodel.state_dict(), os.path.join(
+            params.model_path, "VAE.pt"))
+        torch.save(VAEmodel.conv.state_dict(), os.path.join(
+            params.model_path, "ribTracerObserver.pt"))
+
+        print(f"Epoch {epochID}: {timer()} Train: {trainloss} Val: {valloss}")
 
 
 def trainRibTracerDDPG(params):
@@ -186,5 +251,6 @@ if __name__ == "__main__":
         "Classifier": trainClassier,
         "RibTracer": trainRibTracer,
         "RibTracerDDPG": trainRibTracerDDPG,
+        "VAE": trainVAE
     }
     train_functions[params.trainModel](params)

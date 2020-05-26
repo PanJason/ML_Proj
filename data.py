@@ -199,22 +199,36 @@ class RibTraceDDPGDataset(torch.utils.data.IterableDataset):
             return self.gen_data(worker_id * per_worker, min((worker_id+1) * per_worker, self.file_cnt))
 
 
-def rearrange_pts(pts):
-    boxes = []
-    for k in range(0, len(pts), 4):
-        pts_4 = pts[k:k+4, :]
-        x_inds = np.argsort(pts_4[:, 0])
-        pt_l = np.asarray(pts_4[x_inds[:2], :])
-        pt_r = np.asarray(pts_4[x_inds[2:], :])
-        y_inds_l = np.argsort(pt_l[:, 1])
-        y_inds_r = np.argsort(pt_r[:, 1])
-        tl = pt_l[y_inds_l[0], :]
-        bl = pt_l[y_inds_l[1], :]
-        tr = pt_r[y_inds_r[0], :]
-        br = pt_r[y_inds_r[1], :]
-        # boxes.append([tl, tr, bl, br])
-        boxes.append(tl)
-        boxes.append(tr)
-        boxes.append(bl)
-        boxes.append(br)
-    return np.asarray(boxes, np.float32)
+class VAEDataset(torch.utils.data.IterableDataset):
+    def __init__(self, dataset, params, augment=False):
+        super(VAEDataset, self).__init__()
+        self.params = params
+        self.dataset = dataset
+        self.augment = augment
+
+        self.files = os.listdir(params.data_set)
+        self.file_cnt = len(self.files)
+
+        self.regionSize = params.regionSize
+        self.width = params.regionSize
+        self.height = params.regionSize
+
+    def gen_data(self, start, end):
+        for i in range(start, end):
+            image = Image.open(os.path.join(self.params.data_set, self.files[i]))
+            image = torchvision.transforms.Pad(int(self.regionSize/2))(image)
+            for k in range(self.params.VAESamples):
+                pos = (random.randint(0, self.params.imageSize), random.randint(0, self.params.imageSize))
+                img = torchvision.transforms.functional.crop(image, pos[0], pos[1], self.regionSize, self.regionSize)
+                img = torchvision.transforms.ToTensor()(img)
+                yield img
+
+    def __iter__(self):
+        worker_info = torch.utils.data.get_worker_info()
+        if worker_info is None:  # single-process data loading, return the full iterator
+            return self.gen_data(0, self.file_cnt)
+        else:  # in a worker process
+            per_worker = int(
+                math.ceil(self.file_cnt / float(worker_info.num_workers)))
+            worker_id = worker_info.id
+            return self.gen_data(worker_id * per_worker, min((worker_id+1) * per_worker, self.file_cnt))
