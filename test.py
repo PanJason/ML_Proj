@@ -334,6 +334,17 @@ def calcAP50(params):
     #     json.dump(pr, file, indent=4)
     # print(IOU.get_avg_precision_at_iou(gt, pr))
 
+def doAllTest(params):
+    print("Stage 1: Finding spines")
+    findSpine(params)
+    print("Stage 2: Finding ribs")
+    findRibs(params)
+    print("Stage 3: Finding factures")
+    findFractureClassifier(params)
+    print("Stage 4: Post processing")
+    postProcess(params)
+    print("Stage 5: Evaluating")
+    calcAP50(params)
 
 if __name__ == "__main__":
     params = option.read()
@@ -355,3 +366,5 @@ if __name__ == "__main__":
         postProcess(params)
     elif params.testTarget == "AP50":
         calcAP50(params)
+    elif params.testTarget == "all":
+        doAllTest(params)
