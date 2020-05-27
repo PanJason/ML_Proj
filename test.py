@@ -20,6 +20,8 @@ import matplotlib.pyplot as plt
 import torch
 import torchvision
 import cv2 as cv
+from pycocotools.coco import COCO
+from pycocotools.cocoeval import COCOeval
 
 
 def ribTrace(img, ribTracer, start, direction, params):
@@ -189,7 +191,7 @@ def findFractureClassifier(params):
                 ],
                 "id": i,
                 "image_id": int(imgID),
-                "score": score
+                "score": float(score)
             }
         )
     with open(os.path.join(params.median, "detection.json"), "w") as file:
@@ -256,7 +258,10 @@ def postProcess(params):
             else:
                 result.append((intersect, lastID, sum_score / cnt))
                 intersect = bbox
+                sum_score = score
                 cnt = 1
+    if intersect is not None:
+        result.append((intersect, lastID, sum_score / cnt))
 
     widths = {}
     heights = {}
@@ -284,30 +289,50 @@ def postProcess(params):
 
 
 def calcAP50(params):
-    with open(params.output_path, "r") as file:
-        predict = json.load(file)
-    with open(params.anno_path, "r") as file:
-        target = json.load(file)
+    cocoGt = COCO(params.anno_path)
+    cocoDt = cocoGt.loadRes(params.output_path)
+    imgIds = sorted(cocoGt.getImgIds())
+    # imgId = imgIds[np.random.randint(100)]
+    cocoEval = COCOeval(cocoGt, cocoDt, 'bbox')
+    cocoEval.params.imgIds = imgIds
+    cocoEval.evaluate()
+    cocoEval.accumulate()
+    cocoEval.summarize()
 
-    gt = {}
-    for b in target["annotations"]:
-        box = b["bbox"]
-        if b["id"] in gt:
-            gt[b["id"]].append(box)
-        else:
-            gt[b["id"]] = [box]
+    # with open(params.output_path, "r") as file:
+    #     predict = json.load(file)
+    # with open(params.anno_path, "r") as file:
+    #     target = json.load(file)
 
-    pr = {}
-    for b in predict["annotations"]:
-        box = b["bbox"]
-        score = b["score"]
-        if b["id"] in pr:
-            pr[b["id"]]["boxes"].append(box)
-            pr[b["id"]]["scores"].append(score)
-        else:
-            pr[b["id"]] = {"boxes": [box], "scores": [score]}
+    # gt = {}
+    # for b in target["annotations"]:
+    #     box = b["bbox"]
+    #     box[2] += box[0]
+    #     box[3] += box[1]
+    #     imgID = b["image_id"]
+    #     if imgID in gt:
+    #         gt[imgID].append(box)
+    #     else:
+    #         gt[imgID] = [box]
 
-    print(IOU.get_avg_precision_at_iou(gt, pr))
+    # pr = {}
+    # for b in predict:
+    #     box = b["bbox"]
+    #     box[2] += box[0]
+    #     box[3] += box[1]
+    #     score = b["score"]
+    #     imgID = b["image_id"]
+    #     if imgID in pr:
+    #         pr[imgID]["boxes"].append(box)
+    #         pr[imgID]["scores"].append(score)
+    #     else:
+    #         pr[imgID] = {"boxes": [box], "scores": [score]}
+
+    # with open("result/gt.json", "w") as file:
+    #     json.dump(gt, file, indent=4)
+    # with open("result/pr.json", "w") as file:
+    #     json.dump(pr, file, indent=4)
+    # print(IOU.get_avg_precision_at_iou(gt, pr))
 
 
 if __name__ == "__main__":
