@@ -29,7 +29,7 @@ def ribTrace(img, ribTracer, start, direction, params):
     x = np.array(start)
     w, h = img.size
     img = torchvision.transforms.Grayscale(1)(img)
-    img = torchvision.transforms.Pad(int(params.regionSize/2))(img)
+    img = torchvision.transforms.Pad(int(params.regionSize / 2))(img)
     track = [copy.deepcopy(x)]
     for i in range(params.maxTrace):
         region = torchvision.transforms.functional.crop(
@@ -58,7 +58,7 @@ def ribTrace(img, ribTracer, start, direction, params):
 def ribTraceDDPG(img, ribTracer, start, direction, params):
     x = np.array(start)
     w, h = img.size
-    img = torchvision.transforms.Pad(int(params.regionSize/2))(img)
+    img = torchvision.transforms.Pad(int(params.regionSize / 2))(img)
     _, track = ribTracer.play(img, np.array([start]), direction, False)
     return track
 
@@ -72,12 +72,12 @@ def showRibTraceTrack(imgPath, polys, params):
     img, wscale, hscale = view.scaling(img)
     origin_img = Image.open(imgPath)
     for i, poly in enumerate(polys):
-        print(i+1)
+        print(i + 1)
         poly = np.array(poly)
         track = ribTrace(origin_img, ribTracer,
-                         poly[0], poly[1]-poly[0], params)
+                         poly[0], poly[1] - poly[0], params)
         track = [(int(x[0] * wscale), int(x[1] * hscale)) for x in track]
-        view.drawPoly(img, track, view.randomColor(), i+1)
+        view.drawPoly(img, track, view.randomColor(), i + 1)
     cv.imshow("Display", img)
     cv.waitKey(0)
 
@@ -90,12 +90,12 @@ def showRibTraceTrackDDPG(imgPath, polys, params):
     img, wscale, hscale = view.scaling(img)
     origin_img = Image.open(imgPath)
     for i, poly in enumerate(polys):
-        print(i+1)
+        print(i + 1)
         poly = np.array(poly)
         track = ribTraceDDPG(origin_img, ribTracer,
-                             poly[0], poly[1]-poly[0], params)
+                             poly[0], poly[1] - poly[0], params)
         track = [(int(x[0] * wscale), int(x[1] * hscale)) for x in track]
-        view.drawPoly(img, track, view.randomColor(), i+1)
+        view.drawPoly(img, track, view.randomColor(), i + 1)
     cv.imshow("Display", img)
     cv.waitKey(0)
 
@@ -119,7 +119,7 @@ def findRibs(params):
     result = {}
     for i, file in enumerate(files):
         file_id = file.split('.')[0]
-        print(f"Tracing on image file ({i+1}/{len(files)}): {file}")
+        print(f"Tracing on image file ({i + 1}/{len(files)}): {file}")
         img = Image.open(os.path.join(params.data_set, file))
         tracks = []
         for box in spines[file_id]:
@@ -198,6 +198,7 @@ def findFractureClassifier(params):
     with open(os.path.join(params.median, "detection.json"), "w") as file:
         json.dump(anno, file, indent=4)
 
+
 def findFractureYolo(params):
     with open(os.path.join(params.median, "ribs.json"), "r") as file:
         ribs = json.load(file)
@@ -213,29 +214,29 @@ def findFractureYolo(params):
                                                               pin_memory=True,
                                                               num_workers=0):
         cnt += 1
-        print(cnt)
-        input=[batch[i].numpy().transpose(1,2,0) for i in range(batch.shape[0])]
-
-        output=fd.detectFracture(img=input)
+        input = [batch[i].numpy().transpose(1, 2, 0) for i in range(batch.shape[0])]
+        output = fd.detectFracture(img=input)
         imgIDs = imgIDs.numpy()
+        centers = centers.numpy()
         for i in range(batch.shape[0]):
             if i in output and output[i]['score'] > params.detectThreshold:
-                detected.append((imgIDs[i], output[i]))
+                detected.append((centers[i], imgIDs[i], output[i]))
         if cnt % 100 == 0:
             print(f"Batch {cnt} {timer()}")
 
     with open(params.anno_path, "r") as file:
         anno = json.load(file)
     anno["annotations"] = []
+    regionSize = params.detectRegionSize
     for i, d in enumerate(detected):
-        imgID, output = d
+        center, imgID, output = d
         anno["annotations"].append(
             {
                 "bbox": [
-                    str(output['bbox'][0]),
-                    str(output['bbox'][1]),
-                    str(output['bbox'][2]),
-                    str(output['bbox'][3])
+                    str(float(center[0]) - regionSize / 2 + output['bbox'][0] * regionSize),
+                    str(float(center[1]) - regionSize / 2 + output['bbox'][1] * regionSize),
+                    str(output['bbox'][2] * regionSize),
+                    str(output['bbox'][3] * regionSize)
                 ],
                 "id": i,
                 "image_id": int(imgID),
@@ -244,6 +245,7 @@ def findFractureYolo(params):
         )
     with open(os.path.join(params.median, "detection.json"), "w") as file:
         json.dump(anno, file, indent=4)
+
 
 def bboxIntersect(A, B):
     ax1 = A[0]
@@ -258,7 +260,7 @@ def bboxIntersect(A, B):
     y1 = max(ay1, by1)
     x2 = min(ax2, bx2)
     y2 = min(ay2, by2)
-    return [x1, y1, x2-x1, y2-y1]
+    return [x1, y1, x2 - x1, y2 - y1]
 
 
 def bboxUnion(A, B):
@@ -274,7 +276,7 @@ def bboxUnion(A, B):
     y1 = min(ay1, by1)
     x2 = max(ax2, bx2)
     y2 = max(ay2, by2)
-    return [x1, y1, x2-x1, y2-y1]
+    return [x1, y1, x2 - x1, y2 - y1]
 
 
 def postProcess(params):
@@ -381,6 +383,7 @@ def calcAP50(params):
     #     json.dump(pr, file, indent=4)
     # print(IOU.get_avg_precision_at_iou(gt, pr))
 
+
 def doAllTest(params):
     print("Stage 1: Finding spines")
     findSpine(params)
@@ -392,6 +395,7 @@ def doAllTest(params):
     postProcess(params)
     print("Stage 5: Evaluating")
     calcAP50(params)
+
 
 if __name__ == "__main__":
     params = option.read()
