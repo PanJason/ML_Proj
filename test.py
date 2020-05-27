@@ -10,6 +10,7 @@ import option
 import data
 import model
 import view
+import detector
 import IOU
 from utility import Timer
 from vertebraLandmark import spineFinder
@@ -197,6 +198,52 @@ def findFractureClassifier(params):
     with open(os.path.join(params.median, "detection.json"), "w") as file:
         json.dump(anno, file, indent=4)
 
+def findFractureYolo(params):
+    with open(os.path.join(params.median, "ribs.json"), "r") as file:
+        ribs = json.load(file)
+    dataset = data.ClassifierTestDataset(params.data_set, ribs, params)
+    fd = detector.fracture_detector()
+    if params.useGPU:
+        fd.model = fd.model.cuda()
+    detected = []
+    cnt = 0
+    timer = Timer()
+    for batch, centers, imgIDs in torch.utils.data.DataLoader(dataset,
+                                                              batch_size=params.batchSize,
+                                                              pin_memory=True,
+                                                              num_workers=0):
+        cnt += 1
+        print(cnt)
+        input=[batch[i].numpy().transpose(1,2,0) for i in range(batch.shape[0])]
+
+        output=fd.detectFracture(img=input)
+        imgIDs = imgIDs.numpy()
+        for i in range(batch.shape[0]):
+            if i in output and output[i]['score'] > params.detectThreshold:
+                detected.append((imgIDs[i], output[i]))
+        if cnt % 100 == 0:
+            print(f"Batch {cnt} {timer()}")
+
+    with open(params.anno_path, "r") as file:
+        anno = json.load(file)
+    anno["annotations"] = []
+    for i, d in enumerate(detected):
+        imgID, output = d
+        anno["annotations"].append(
+            {
+                "bbox": [
+                    str(output['bbox'][0]),
+                    str(output['bbox'][1]),
+                    str(output['bbox'][2]),
+                    str(output['bbox'][3])
+                ],
+                "id": i,
+                "image_id": int(imgID),
+                "score": str(output['score']),
+            }
+        )
+    with open(os.path.join(params.median, "detection.json"), "w") as file:
+        json.dump(anno, file, indent=4)
 
 def bboxIntersect(A, B):
     ax1 = A[0]
