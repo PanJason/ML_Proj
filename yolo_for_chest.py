@@ -7,7 +7,8 @@ import numpy as np
 import option
 import json
 import cv2
-num_classes=2#0不是chest,1是chest
+import os
+num_classes=1#0不是chest,1是chest
 B=2#每个cell产生的bbox数量
 picture_size=448#输入图片的大小
 params = option.read()#命令行参数
@@ -154,85 +155,170 @@ class yoloLoss(nn.Module):
 
         return (self.l_coord * loc_loss + contain_loss + self.l_noobj * nooobj_loss + class_loss) / N
 
+
 class chest_dataset(torch.utils.data.Dataset):
-    def __init__(self,mode=0):
+    def __init__(self, mode=0):
         """
                 mode: 0训练，1验证，2测试
                 is_aug:  是否进行数据增广
                 """
-        self.mode=mode
-        if mode==0:
-            self.img_path=params.data_set
-            self.annotation_path =params.addi_path
-        if mode==1:
-            self.img_path=params.val_data_set
-            self.annotation_path=params.val_addi_path
+        self.mode = mode
+        if mode == 0:
+            self.img_path = 'data/fracture/train'
+            self.annotation_path = 'additional_anno/additional_anno_train.json'
+        if mode == 1:
+            self.img_path = 'data/fracture/val'
+            self.annotation_path = 'additional_anno/additional_anno_val.json'
         with open(self.annotation_path, "r") as file:
             anno = json.load(file)
-        self.bboxes=anno['bbox']
-        self.map=[i for i in self.bboxes.keys()]
+        self.bboxes = anno['bbox']
+        self.map = [i for i in self.bboxes.keys()]
+
     def __len__(self):
         return len(self.bboxes)
 
     def __getitem__(self, item):
-        img=cv2.imread(self.img_path+'/'+self.map[item]+".png")
-        img=cv2.resize(img,(picture_size,picture_size))
+        img = cv2.imread(self.img_path + '/' + self.map[item] + ".png")
+        img = cv2.resize(img, (picture_size, picture_size))
+        bbox = np.array(self.bboxes[self.map[item]]) * 448.0 / 3056
+
+        rotate_time = random.randint(0, 3)
+        for i in range(rotate_time):
+            img, bbox = rotate_90(img, bbox)
+
+        scale = 0.5 + random.random() * 0.5
+        img, bbox = warp(img, bbox, scale)
+
         img = img.transpose(2, 0, 1)
-        img=torch.from_numpy(img).float()
-        target=torch.zeros(7,7,num_classes+B*5)
-        x=self.bboxes[self.map[item]][0][0]*1.0/3056
-        y=self.bboxes[self.map[item]][0][1]*1.0/3056
-        w=self.bboxes[self.map[item]][1][0]*1.0/3056
-        h=self.bboxes[self.map[item]][1][1]*1.0/3056
-        gridsize=1.0/7
-        center_x=x+0.5*w
-        center_y=y+0.5*h
-        gridx=int(center_x/gridsize)
-        gridy=int(center_y/gridsize)
-        px=center_x/gridsize-gridx
-        py=center_y/gridsize-gridy
-        target[gridx,gridy,0],target[gridx,gridy,5]=px,px
-        target[gridx,gridy,1],target[gridx,gridy,6]=py,py
-        target[gridx,gridy,2],target[gridx,gridy,7]=w,w
-        target[gridx,gridy,3],target[gridx,gridy,8]=h,h
-        target[gridx,gridy,4],target[gridx,gridy,9]=1,1
-        target[gridx,gridy,11]=1
-        return img,target
+        img = torch.from_numpy(img).float()
+        target = torch.zeros(7, 7, num_classes + B * 5)
+        x = bbox[0][0] * 1.0 / 448
+        y = bbox[0][1] * 1.0 / 448
+        w = bbox[1][0] * 1.0 / 448
+        h = bbox[1][1] * 1.0 / 448
+        gridsize = 1.0 / 7
+        center_x = x + 0.5 * w
+        center_y = y + 0.5 * h
+        gridx = int(center_x / gridsize)
+        gridy = int(center_y / gridsize)
+        px = center_x / gridsize - gridx
+        py = center_y / gridsize - gridy
+        target[gridx, gridy, 0], target[gridx, gridy, 5] = px, px
+        target[gridx, gridy, 1], target[gridx, gridy, 6] = py, py
+        target[gridx, gridy, 2], target[gridx, gridy, 7] = w, w
+        target[gridx, gridy, 3], target[gridx, gridy, 8] = h, h
+        target[gridx, gridy, 4], target[gridx, gridy, 9] = 1, 1
+        target[gridx, gridy, 10] = 1
+        return img, target
+
+
+def rotate_90(img, bbox):
+    matRotate = cv2.getRotationMatrix2D((224, 224), 90, 1)  # mat rotate 1 center 2 angle 3 缩放系数
+    dst = cv2.warpAffine(img, matRotate, (448, 448))
+    ox, oy = bbox[0]
+    ow, oh = bbox[1]
+    w, h = oh, ow
+    x = oy
+    y = 448 - ox - ow
+    return dst, np.array([[x, y], [w, h]])
+
+
+def warp(img, bbox, scale):
+    new_size = int(448 * scale)
+    src = cv2.resize(img, (new_size, new_size))
+    dst = np.zeros((448, 448, 3))
+    dst[0:new_size, 0:new_size, :] = src[0:new_size, 0:new_size, :]
+    bbox1 = bbox * scale
+    return dst, bbox1
+
 
 def train():
-    epoch = 50
+    epoch = 500
     batchsize = 5
     lr = 0.001
 
     train_data = chest_dataset()
-    train_dataloader = torch.utils.data.DataLoader(train_data,batch_size=batchsize,shuffle=True)
-    model = Yolo()
-    if params.useGPU:
-        model = model.cuda()
+    train_dataloader = torch.utils.data.DataLoader(train_data, batch_size=batchsize, shuffle=True)
+    model = torch.load("./saved_model/YOLOv1_epoch" + str(250) + ".pkl")
     # model.children()里是按模块(Sequential)提取的子模块，而不是具体到每个层，具体可以参见pytorch帮助文档
     # 冻结resnet34特征提取层，特征提取层不参与参数更新
     for layer in model.children():
         layer.requires_grad = False
         break
+
     criterion = yoloLoss()
-    optimizer = torch.optim.SGD(model.parameters(),lr=lr,momentum=0.9,weight_decay=0.0005)
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=0.0005)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10, 20, 30, 40, 100, 200, 300, 400],
+                                                     gamma=0.5)
     for e in range(epoch):
         model.train()
+        scheduler.step()
+        if e < 250:
+            continue
         yl = torch.Tensor([0])
-        for i,(inputs,labels) in enumerate(train_dataloader):
-            inputs = inputs
-            labels = labels.float()
+        for i, (inputs, labels) in enumerate(train_dataloader):
+            inputs = inputs.cuda()
+            labels = labels.float().cuda()
             pred = model(inputs)
             loss = criterion(pred, labels)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-            print("Epoch %d/%d| Step %d/%d| Loss: %.2f"%(e,epoch,i,len(train_data)//batchsize,loss))
+            print("Epoch %d/%d| Step %d/%d| Loss: %.2f" % (e, epoch, i, len(train_data) // batchsize, loss))
             yl = yl + loss
-        if (e+1)%10==0:
-            torch.save(model,"./saved_model/YOLOv1_epoch"+str(e+1)+".pkl")
+        if (e + 1) % 50 == 0:
+            torch.save(model, "./saved_model/YOLOv1_epoch" + str(e + 1) + ".pkl")
         with open('log.txt', 'a+') as file_object:
-            file_object.write("epoch:%d loss:%f\n" % (e, yl/len(train_data)))
+            file_object.write("epoch:%d loss:%f\n" % (e, yl / len(train_data)))
+
+def generate_bboxes(pred):
+    #pred: tensor batchsize*7*7*12
+    #bboxes:tensor batchsize *4 x1 y1 x2 y2
+    N=pred.size()[0]
+    bboxes=torch.zeros(N,4).float()
+    pred_bboxes=pred[:,:,:,:10].contiguous().view(-1,5)
+    for i in range(N):
+        a=pred_bboxes[i*98:(i+1)*98,4]
+        b,c=torch.max(a,0)
+        px,py,w,h=pred_bboxes[i*98+c,0:4]
+        c=int(c)//2
+        u=c//7
+        v=c%7
+        x=(u+px)*1.0/7
+        y=(v+py)*1.0/7
+        x1=min(max(x-0.5*w,0),1)*3056
+        x2=min(max(x+0.5*w,0),1)*3056
+        y1=min(max(y-0.5*h,0),1)*3056
+        y2=min(max(y+0.5*h,0),1)*3056
+        bboxes[i,0],bboxes[i,1],bboxes[i,2],bboxes[i,3]=x1,y1,x2,y2
+    return bboxes
+
+
+def test_chest(params):
+    model=torch.load(os.path.join(params.model_path,'yolo_for_chest.pkl'))
+    mydevice = torch.device(
+        "cuda:0" if torch.cuda.is_available() else "cpu")
+    model = model.to(mydevice)
+    files = os.listdir(params.data_set)
+    result = {}
+    for i, file in enumerate(files):
+        file_id = file.split('.')[0]
+        print(f"testing on image file ({i + 1}/{len(files)}): {file}")
+        img = cv2.imread(os.path.join(params.data_set, file))
+        img = cv2.resize(img, (448, 448))
+        img1 = img.transpose(2, 0, 1)
+        img1 = torch.from_numpy(img1).unsqueeze(0).float().cuda()
+        pred = model(img1)
+        bboxes = generate_bboxes(pred)
+        x1, y1, x2, y2 = bboxes[0, :]
+        w=x2-x1
+        h=y2-y1
+        bbox=[float(x1),float(y1),float(w),float(h)]
+        result[i]={'bbox':bbox,'id':i,'image_id':file_id}
+    with open(os.path.join(params.median, "chest.json"), "w") as file:
+        json.dump(result, file, indent=4)
+    return result
+
 if __name__=='__main__':
     train()

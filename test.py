@@ -246,6 +246,9 @@ def findFractureYolo(params):
     with open(os.path.join(params.median, "detection.json"), "w") as file:
         json.dump(anno, file, indent=4)
 
+def findChest(params):
+    yolo_for_chest.test_chest(params)
+
 
 def bboxIntersect(A, B):
     ax1 = A[0]
@@ -406,6 +409,8 @@ if __name__ == "__main__":
                               anno["poly"]["101"][1:], params)
     elif params.testTarget == "spine":
         view.showSpine("101")
+    elif params.testTarget == "chest":
+        findChest(params)
     elif params.testTarget == "ribs":
         findRibs(params)
         # files = os.listdir(params.data_set)
