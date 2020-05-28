@@ -296,3 +296,67 @@ class ClassifierTestDataset(torch.utils.data.IterableDataset):
                 math.ceil(self.file_cnt / float(worker_info.num_workers)))
             worker_id = worker_info.id
             return self.gen_data(worker_id * per_worker, min((worker_id+1) * per_worker, self.file_cnt))
+
+
+class ChestDivideDataset(torch.utils.data.IterableDataset):
+    def __init__(self, dataset, anno, params):
+        super(ChestDivideDataset, self).__init__()
+        self.params = params
+        self.sampleRate = params.detectRate
+
+        with open(anno, "r") as file:
+            self.anno = json.load(file)
+
+        self.files = os.listdir(dataset)
+        self.file_cnt = len(self.files)
+        self.ids = [i.split('.')[0] for i in self.files]
+        self.files = [os.path.join(dataset, i) for i in self.files]
+
+        self.regionSize = params.detectRegionSize
+
+    def gen_data(self, start, end):
+        for i in range(start, end):
+            image = Image.open(self.files[i])
+            image = image.convert("RGB")
+            image = torchvision.transforms.Pad(int(self.regionSize/2))(image)
+
+            box = self.anno[self.ids[i]]
+            # print(box)
+
+            wcnt = int((box[2] - box[0]) / self.sampleRate)
+            hcnt = int((box[3] - box[1]) / self.sampleRate)
+
+            for i in range(wcnt):
+                for j in range(hcnt):
+                    yield self.getRegion(image,
+                                         (
+                                             (
+                                                 int(box[0] * (1 - i / wcnt) +
+                                                     box[2] * (i / wcnt)),
+                                                 int(box[1] * (1 - j / hcnt) +
+                                                     box[3] * (j / hcnt))
+                                             ),
+                                             self.ids[i],
+                                         ))
+
+    def getRegion(self, image, info):
+        center, imgID = info
+        imgID = int(imgID)
+        # print(center)
+        region = TransFunc.crop(
+            image, center[1], center[0], self.regionSize, self.regionSize)
+
+        region = torchvision.transforms.ToTensor()(region)
+        center = torch.tensor(center, dtype=float)
+        imgID = torch.tensor(imgID, dtype=int)
+        return region, center, imgID
+
+    def __iter__(self):
+        worker_info = torch.utils.data.get_worker_info()
+        if worker_info is None:  # single-process data loading, return the full iterator
+            return self.gen_data(0, self.file_cnt)
+        else:  # in a worker process
+            per_worker = int(
+                math.ceil(self.file_cnt / float(worker_info.num_workers)))
+            worker_id = worker_info.id
+            return self.gen_data(worker_id * per_worker, min((worker_id+1) * per_worker, self.file_cnt))

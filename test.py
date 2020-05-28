@@ -214,7 +214,8 @@ def findFractureYolo(params):
                                                               pin_memory=True,
                                                               num_workers=0):
         cnt += 1
-        input = [batch[i].numpy().transpose(1, 2, 0) for i in range(batch.shape[0])]
+        input = [batch[i].numpy().transpose(1, 2, 0)
+                 for i in range(batch.shape[0])]
         output = fd.detectFracture(img=input)
         imgIDs = imgIDs.numpy()
         centers = centers.numpy()
@@ -233,8 +234,10 @@ def findFractureYolo(params):
         anno["annotations"].append(
             {
                 "bbox": [
-                    str(float(center[0]) - regionSize / 2 + output['bbox'][0] * regionSize),
-                    str(float(center[1]) - regionSize / 2 + output['bbox'][1] * regionSize),
+                    str(float(center[0]) - regionSize /
+                        2 + output['bbox'][0] * regionSize),
+                    str(float(center[1]) - regionSize /
+                        2 + output['bbox'][1] * regionSize),
                     str(output['bbox'][2] * regionSize),
                     str(output['bbox'][3] * regionSize)
                 ],
@@ -245,6 +248,7 @@ def findFractureYolo(params):
         )
     with open(os.path.join(params.median, "detection.json"), "w") as file:
         json.dump(anno, file, indent=4)
+
 
 def findChest(params):
     yolo_for_chest.test_chest(params)
@@ -412,10 +416,14 @@ if __name__ == "__main__":
     elif params.testTarget == "chest":
         findChest(params)
     elif params.testTarget == "ribs":
-        findRibs(params)
-        # files = os.listdir(params.data_set)
-        # for f in files:
-        # view.showRibs(f.split('.')[0])
+        # findRibs(params)
+        files = os.listdir(params.data_set)
+        for f in files:
+            view.showRibs(
+                f.split('.')[0],
+                "data/fracture/annotations/anno_val.json",
+                "result/result.json"
+            )
     elif params.testTarget == "fracture":
         findFractureClassifier(params)
     elif params.testTarget == "postProcess":

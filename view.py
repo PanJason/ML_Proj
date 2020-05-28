@@ -108,7 +108,8 @@ def showSpine(imgID):
     cv.imshow("Display", img)
     cv.waitKey(0)
 
-def showRibs(imgID):
+
+def showRibs(imgID, label=None, result=None):
     imgPath = params.data_set + "/" + str(imgID) + ".png"
 
     img = cv.imread(imgPath)
@@ -131,6 +132,38 @@ def showRibs(imgID):
             for i in poly
         ]
         drawPoly(img, poly, randomColor(), i+1)
+
+    if label is not None:
+        with open(label, "r") as file:
+            anno = json.load(file)
+        boxes = data.getAnno(int(imgID), anno)
+        for box in boxes:
+            left = box[0] * wscale
+            top = box[1] * hscale
+            right = left + box[2] * wscale
+            down = top + box[3] * wscale
+            cv.rectangle(img,
+                         (int(left), int(top)),
+                         (int(right), int(down)),
+                         (0, 255, 255),
+                         2)
+
+    if result is not None:
+        with open(result, "r") as file:
+            anno = json.load(file)
+        for i in anno:
+            if i["image_id"] != int(imgID):
+                continue
+            box = i["bbox"]
+            left = box[0] * wscale
+            top = box[1] * hscale
+            right = left + box[2] * wscale
+            down = top + box[3] * wscale
+            cv.rectangle(img,
+                         (int(left), int(top)),
+                         (int(right), int(down)),
+                         (255, 0, 255),
+                         2)
 
     cv.imshow("Display", img)
     cv.waitKey(0)
@@ -284,10 +317,10 @@ def makeAllPolyAnno(save_path, start_from=None, total=None):
 
 if __name__ == "__main__":
     # makeAllPolyAnno("poly_train_139.json", 139, total=1)
-    allFiles = os.listdir(params.data_set)
+    allFiles = os.listdir(params.val_data_set)
     for f in allFiles:
         num = int(f.split('.')[0])
         print(num)
         showImage(
-            num, additionalAnno="data/fracture/annotations/additional_anno_train.json")
+            num, additionalAnno="data/fracture/annotations/additional_anno_val.json")
     # print(boundBoxAnno(139))
