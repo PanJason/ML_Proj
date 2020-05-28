@@ -7,12 +7,13 @@ import numpy as np
 
 
 class fracture_detector:
-    def __init__(self, cfg='cfg/yolov3-tiny3-1cls.cfg', weights='saved_model/detector_yolo.pt', half=False ):
+    def __init__(self, cfg='cfg/yolov3-tiny3-1cls.cfg', weights='saved_model/detector_yolo.pt', half=False):
         imgsz = 416
         device_available = '0' if torch.cuda.is_available() else 'cpu'
         device = torch_utils.select_device(device=device_available)
         self.model = Darknet(cfg, imgsz)
-        self.model.load_state_dict(torch.load(weights, map_location=device)['model'])
+        self.model.load_state_dict(torch.load(
+            weights, map_location=device)['model'])
         print('load yolo tiny successfully')
         self.model.to(device).eval()
 
@@ -22,7 +23,6 @@ class fracture_detector:
             self.model.half()
 
     def detectFracture(self, img, augment=True, conf_thres=0.5, iou_thres=0.5, agnostic_nms=False, half=False):
-
         '''
         :param img: a list of images of size (H, W, C), or an image of size (H, W, C)
         :return: a dict describing the bbox in each image
@@ -40,7 +40,7 @@ class fracture_detector:
         img = np.array(img)
         img = torch.from_numpy(img).to(device)
         img = img.half() if half else img.float()  # uint8 to fp16/32
-        img /= 255.0  # 0 - 255 to 0.0 - 1.0
+        # img /= 255.0  # 0 - 255 to 0.0 - 1.0
         if img.ndimension() == 3:
             img = img.unsqueeze(0)
 
@@ -52,7 +52,7 @@ class fracture_detector:
                 inf_out = inf_out.float()
 
             output = non_max_suppression(inf_out, conf_thres, iou_thres,
-                                        multi_label=False, agnostic=agnostic_nms)
+                                         multi_label=False, agnostic=agnostic_nms)
 
         pred_dict = dict()
         for i, pred in enumerate(output):
@@ -76,11 +76,10 @@ class fracture_detector:
 
         return pred_dict
 
+
 '''
 img = cv2.imread('../detectorData/val/images/0.png')
 # img = cv2.resize(img, (416, 416))
 # img = np.transpose(img, (2, 0, 1))
 detectFracture(img)
 '''
-
-

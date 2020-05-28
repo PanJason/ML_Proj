@@ -309,6 +309,7 @@ class ChestDivideDataset(torch.utils.data.IterableDataset):
 
         self.files = os.listdir(dataset)
         self.file_cnt = len(self.files)
+        # self.file_cnt = 1
         self.ids = [i.split('.')[0] for i in self.files]
         self.files = [os.path.join(dataset, i) for i in self.files]
 
@@ -326,15 +327,15 @@ class ChestDivideDataset(torch.utils.data.IterableDataset):
             wcnt = int((box[2] - box[0]) / self.sampleRate)
             hcnt = int((box[3] - box[1]) / self.sampleRate)
 
-            for i in range(wcnt):
-                for j in range(hcnt):
+            for u in range(wcnt):
+                for v in range(hcnt):
                     yield self.getRegion(image,
                                          (
                                              (
-                                                 int(box[0] * (1 - i / wcnt) +
-                                                     box[2] * (i / wcnt)),
-                                                 int(box[1] * (1 - j / hcnt) +
-                                                     box[3] * (j / hcnt))
+                                                 int(box[0] * (1 - u / wcnt) +
+                                                     box[2] * (u / wcnt)),
+                                                 int(box[1] * (1 - v / hcnt) +
+                                                     box[3] * (v / hcnt))
                                              ),
                                              self.ids[i],
                                          ))

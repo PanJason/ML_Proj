@@ -103,7 +103,7 @@ def read():
     parser.add_argument('--K', type=int, default=100,
                         help='maximum of objects')
     parser.add_argument('--conf_thresh', type=float,
-                        default=0.2, help='confidence threshold')
+                        default=0.001, help='confidence threshold')
     parser.add_argument('--seg_thresh', type=float,
                         default=0.5, help='confidence threshold')
     parser.add_argument('--num_classes', type=int,

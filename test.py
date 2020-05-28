@@ -14,6 +14,7 @@ import detector
 import IOU
 from utility import Timer
 from vertebraLandmark import spineFinder
+import yolo_for_chest
 
 import numpy as np
 from PIL import Image
@@ -250,6 +251,58 @@ def findFractureYolo(params):
         json.dump(anno, file, indent=4)
 
 
+def findFractureChestDivide(params):
+    with open(os.path.join(params.median, "ribs.json"), "r") as file:
+        ribs = json.load(file)
+    dataset = data.ChestDivideDataset(
+        params.data_set, os.path.join(params.median, "chest.json"), params)
+    fd = detector.fracture_detector()
+    if params.useGPU:
+        fd.model = fd.model.cuda()
+    detected = []
+    cnt = 0
+    timer = Timer()
+    for batch, centers, imgIDs in torch.utils.data.DataLoader(dataset,
+                                                              batch_size=params.batchSize,
+                                                              pin_memory=True,
+                                                              num_workers=0):
+        cnt += 1
+        input = [batch[i].numpy().transpose(1, 2, 0)
+                 for i in range(batch.shape[0])]
+        output = fd.detectFracture(img=input)
+        imgIDs = imgIDs.numpy()
+        centers = centers.numpy()
+        for i in range(batch.shape[0]):
+            if i in output and output[i]['score'] > params.detectThreshold:
+                detected.append((centers[i], imgIDs[i], output[i]))
+        if cnt % 100 == 0:
+            print(f"Batch {cnt} {timer()}")
+
+    with open(params.anno_path, "r") as file:
+        anno = json.load(file)
+    anno["annotations"] = []
+    regionSize = params.detectRegionSize
+    for i, d in enumerate(detected):
+        center, imgID, output = d
+        anno["annotations"].append(
+            {
+                "bbox": [
+                    str(float(center[0]) - regionSize /
+                        2 + output['bbox'][0] * regionSize),
+                    str(float(center[1]) - regionSize /
+                        2 + output['bbox'][1] * regionSize),
+                    str(output['bbox'][2] * regionSize),
+                    str(output['bbox'][3] * regionSize)
+                ],
+                "id": i,
+                "image_id": int(imgID),
+                "score": str(output['score']),
+            }
+        )
+    with open(os.path.join(params.median, "detection.json"), "w") as file:
+        json.dump(anno, file, indent=4)
+
+
 def findChest(params):
     yolo_for_chest.test_chest(params)
 
@@ -296,8 +349,9 @@ def postProcess(params):
     result = []
     for box in anno["annotations"]:
         bbox = box["bbox"]
+        bbox = list(map(float, bbox))
         imgID = box["image_id"]
-        score = box["score"]
+        score = float(box["score"])
         if lastID != imgID:
             if intersect is not None:
                 result.append((intersect, lastID, sum_score / cnt))
@@ -416,19 +470,34 @@ if __name__ == "__main__":
     elif params.testTarget == "chest":
         findChest(params)
     elif params.testTarget == "ribs":
-        # findRibs(params)
-        files = os.listdir(params.data_set)
-        for f in files:
-            view.showRibs(
-                f.split('.')[0],
-                "data/fracture/annotations/anno_val.json",
-                "result/result.json"
-            )
+        findRibs(params)
+        # files = os.listdir(params.data_set)
+        # for f in files:
+        # view.showRibs(
+        # f.split('.')[0],
+        # )
     elif params.testTarget == "fracture":
         findFractureClassifier(params)
+    elif params.testTarget == "fractureYolo":
+        findFractureYolo(params)
+    elif params.testTarget == "fractureChest":
+        findFractureChestDivide(params)
     elif params.testTarget == "postProcess":
         postProcess(params)
     elif params.testTarget == "AP50":
         calcAP50(params)
     elif params.testTarget == "all":
         doAllTest(params)
+    elif params.testTarget == "result":
+        view.showRibs(
+            8,
+            params.anno_path,
+            params.output_path
+        )
+        # files = os.listdir(params.data_set)
+        # for f in files:
+        # view.showRibs(
+        # f.split('.')[0],
+        # params.anno_path,
+        # params.output_path
+        # )
