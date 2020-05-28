@@ -269,7 +269,8 @@ def findFractureChestDivide(params):
         cnt += 1
         input = [batch[i].numpy().transpose(1, 2, 0)
                  for i in range(batch.shape[0])]
-        output = fd.detectFracture(img=input)
+        output = fd.detectFracture(
+            img=input, conf_thres=params.conf_thresh, iou_thres=params.seg_thresh)
         imgIDs = imgIDs.numpy()
         centers = centers.numpy()
         for i in range(batch.shape[0]):

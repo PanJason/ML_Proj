@@ -309,7 +309,6 @@ class ChestDivideDataset(torch.utils.data.IterableDataset):
 
         self.files = os.listdir(dataset)
         self.file_cnt = len(self.files)
-        # self.file_cnt = 1
         self.ids = [i.split('.')[0] for i in self.files]
         self.files = [os.path.join(dataset, i) for i in self.files]
 
