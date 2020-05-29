@@ -217,7 +217,8 @@ def findFractureYolo(params):
         cnt += 1
         input = [batch[i].numpy().transpose(1, 2, 0)
                  for i in range(batch.shape[0])]
-        output = fd.detectFracture(img=input)
+        output = fd.detectFracture(
+            img=input, conf_thres=params.conf_thresh, iou_thres=params.seg_thresh)
         imgIDs = imgIDs.numpy()
         centers = centers.numpy()
         for i in range(batch.shape[0]):
@@ -348,69 +349,69 @@ def postProcess(params, merge=False):
     sum_score = 0.0
     cnt = 0
 
-    # imgBoxes = {}
-    # for box in anno["annotations"]:
-    #     bbox = box["bbox"]
-    #     box["bbox"] = list(map(float, bbox))
-    #     imgID = box["image_id"]
-    #     box["score"] = float(box["score"])
-    #     if imgID not in imgBoxes:
-    #         imgBoxes[imgID] = [box]
-    #     else:
-    #         imgBoxes[imgID].append(box)
-
-    # if merge:
-    #     result = []
-    #     for _, imgBox in imgBoxes.items():
-    #         boxes = {}
-    #         for x, box in enumerate(imgBox):
-    #             bbox = box["bbox"]
-    #             imgID = box["image_id"]
-    #             score = float(box["score"])
-
-    #             res = bbox
-    #             remove_ids = []
-    #             for i, b in boxes.items():
-    #                 intersect = bboxIntersect(res, b[0])
-    #                 if intersect[2] > 0 and intersect[3] > 0:
-    #                     res = intersect
-    #                     score = min(b[2], score)
-    #                     remove_ids.append(i)
-    #             for i in remove_ids:
-    #                 del boxes[i]
-    #             boxes[x] = (res, imgID, score)
-    #         for i, b in boxes.items():
-    #             result.append(b)
-    # else:
-    #     result = [(imgBox["bbox"], imgBox["image_id"], imgBox["score"])
-    #               for imgBox in anno["annotations"]]
-
-    result = []
+    imgBoxes = {}
     for box in anno["annotations"]:
         bbox = box["bbox"]
-        bbox = list(map(float, bbox))
+        box["bbox"] = list(map(float, bbox))
         imgID = box["image_id"]
-        score = float(box["score"])
-        if lastID != imgID:
-            if intersect is not None:
-                result.append((intersect, lastID, sum_score / cnt))
-            lastID = imgID
-            intersect = bbox
-            sum_score = score
-            cnt = 1
+        box["score"] = float(box["score"])
+        if imgID not in imgBoxes:
+            imgBoxes[imgID] = [box]
         else:
-            I = bboxIntersect(bbox, intersect)
-            if I[2] > 0 and I[3] > 0:
-                intersect = I
-                cnt += 1
-                sum_score += score
-            else:
-                result.append((intersect, lastID, sum_score / cnt))
-                intersect = bbox
-                sum_score = score
-                cnt = 1
-    if intersect is not None:
-        result.append((intersect, lastID, sum_score / cnt))
+            imgBoxes[imgID].append(box)
+
+    if merge:
+        result = []
+        for _, imgBox in imgBoxes.items():
+            boxes = {}
+            for x, box in enumerate(imgBox):
+                bbox = box["bbox"]
+                imgID = box["image_id"]
+                score = float(box["score"])
+
+                res = bbox
+                remove_ids = []
+                for i, b in boxes.items():
+                    intersect = bboxIntersect(res, b[0])
+                    if intersect[2] > 0 and intersect[3] > 0:
+                        res = intersect
+                        score = min(b[2], score)
+                        remove_ids.append(i)
+                for i in remove_ids:
+                    del boxes[i]
+                boxes[x] = (res, imgID, score)
+            for i, b in boxes.items():
+                result.append(b)
+    else:
+        result = [(imgBox["bbox"], imgBox["image_id"], imgBox["score"])
+                  for imgBox in anno["annotations"]]
+
+    # result = []
+    # for box in anno["annotations"]:
+    #     bbox = box["bbox"]
+    #     bbox = list(map(float, bbox))
+    #     imgID = box["image_id"]
+    #     score = float(box["score"])
+    #     if lastID != imgID:
+    #         if intersect is not None:
+    #             result.append((intersect, lastID, sum_score / cnt))
+    #         lastID = imgID
+    #         intersect = bbox
+    #         sum_score = score
+    #         cnt = 1
+    #     else:
+    #         I = bboxIntersect(bbox, intersect)
+    #         if I[2] > 0 and I[3] > 0:
+    #             intersect = I
+    #             cnt += 1
+    #             sum_score += score
+    #         else:
+    #             result.append((intersect, lastID, sum_score / cnt))
+    #             intersect = bbox
+    #             sum_score = score
+    #             cnt = 1
+    # if intersect is not None:
+    #     result.append((intersect, lastID, sum_score / cnt))
 
     widths = {}
     heights = {}
