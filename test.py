@@ -485,6 +485,103 @@ def calcAP50(params):
     # print(IOU.get_avg_precision_at_iou(gt, pr))
 
 
+
+def YoloPost(params):
+    with open(os.path.join(params.median, "detection.json"), "r") as file:
+        detection = json.load(file)
+    with open(os.path.join(params.median, 'chest.json'), 'r') as f:
+        chests = json.load(f)
+    with open(os.path.join(params.median, 'spine.json'), 'r') as f:
+        spines = json.load(f)
+
+    boxPerImage = dict()
+    output = []
+    output_cnt = 0
+    for anno in detection['annotations']:
+        x, y, w, h = map(float, anno['bbox'])
+        score = float(anno['score'])
+        image_id = anno['image_id']
+        if image_id not in boxPerImage:
+            boxPerImage[image_id] = []
+        boxPerImage[image_id].append([x, y, w, h, score])
+
+    for image_id in boxPerImage:
+        spine = spines[str(image_id)]
+        chest = chests[str(image_id)]
+        minx = maxx = 0
+        cnt = 0
+        chestx, chesty, chestw, chesth = chest
+        for s in spine:
+            if chestx < s[0][0] < chestx + chestw:
+                minx += (s[1][0]+s[3][0])
+                maxx += (s[2][0]+ s[4][0])
+                cnt += 2
+        minx /= cnt
+        maxx /= cnt
+
+        res = []
+        for i in boxPerImage[image_id]:
+            x, y, w, h = i[:4]
+            # exclude the bbox if its position is bad
+            if x + w < chestx or x > chestx + chestw or y < chesty or y + h/2 > chesty + chesth: # out of chest range
+                continue
+            if abs(x - chestx) < 200 and abs(y - chesty) < 200: # at the left top
+                continue
+            if abs(x + w - chestx - chestw) < 200 and abs(y - chesty) < 200: # at the right top
+                continue
+            if y < chesty + 100: # at the above of the chest
+                continue
+            if minx < x + w < maxx or minx < x < maxx: # intersect with spine
+                continue
+            if i[4] < params.conf_thresh:
+                continue
+            res.append([x, y, x+w, y+h, i[4]])
+
+        res = np.array(res)
+        pred = non_max_suppress(res)
+
+        for p in pred:
+            t = dict()
+            t['bbox'] = [float(p[0]), float(p[1]), float(p[2] - p[0]), float(p[3] - p[1])]
+            t['score'] = float(p[4])
+            t['id'] = output_cnt
+            t['image_id'] = image_id
+            output_cnt += 1
+            output.append(t)
+
+    with open(params.output_path, "w") as file:
+        json.dump(output, file, indent=4)
+
+
+
+def non_max_suppress(pred, threshold=0.3):
+
+    x1, y1, x2, y2, scores = pred[:, 0], pred[:, 1], \
+                                 pred[:, 2], pred[:, 3], pred[:, 4]
+    areas = (x2 - x1 + 1) * (y2 - y1 + 1)
+
+    order = scores.argsort()[::-1]
+
+    keep = []
+
+    while order.size > 0:
+        i = order[0]
+        keep.append(i)
+        xx1 = np.maximum(x1[i], x1[order[1:]])
+        yy1 = np.maximum(y1[i], y1[order[1:]])
+        xx2 = np.minimum(x2[i], x2[order[1:]])
+        yy2 = np.minimum(y2[i], y2[order[1:]])
+        inter = np.maximum(0.0, xx2 - xx1 + 1) * np.maximum(0.0, yy2 - yy1 + 1)
+        iou = inter / (areas[i] + areas[order[1:]] - inter)
+        indexs = np.where(iou <= threshold)[0] + 1
+
+        order = order[indexs]
+
+    output = pred[keep]
+
+    return output
+
+
 def doAllTest(params):
     print("Stage 1: Finding spines")
     findSpine(params)
@@ -524,6 +621,8 @@ if __name__ == "__main__":
         findFractureChestDivide(params)
     elif params.testTarget == "postProcess":
         postProcess(params)
+    elfif params.testTarget == 'Yolopost':
+        Yolopost(params)
     elif params.testTarget == "AP50":
         calcAP50(params)
     elif params.testTarget == "all":
