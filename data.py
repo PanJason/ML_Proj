@@ -79,7 +79,7 @@ class RibTraceDataset(torch.utils.data.IterableDataset):
         points = []
         for i in range(0, len(poly)-1):
             length = np.linalg.norm(poly[i] - poly[i+1])
-            sample_cnt = int(self.sampleRate * length)
+            sample_cnt = int(math.ceil(self.sampleRate * length))
             samples = [(
                 (poly[i+1] * (j/sample_cnt) + poly[i] * (1-(j/sample_cnt))),
                 poly[i],
@@ -267,13 +267,13 @@ class ClassifierTestDataset(torch.utils.data.IterableDataset):
         points = []
         for i in range(0, len(poly)-1):
             length = np.linalg.norm(poly[i] - poly[i+1])
-            sample_cnt = int(length / self.sampleRate)
+            sample_cnt = int(math.ceil(length / self.sampleRate))
             samples = [(
                 (poly[i+1] * (j/sample_cnt) + poly[i] * (1-(j/sample_cnt))),
                 imgID
             )
                 for j in range(sample_cnt)]
-            points.append(samples)
+        points.append(samples)
         return itertools.chain(*points)
 
     def getRegion(self, image, info):
@@ -309,7 +309,9 @@ class ChestDivideDataset(torch.utils.data.IterableDataset):
 
         self.files = os.listdir(dataset)
         self.file_cnt = len(self.files)
+        # self.file_cnt = 1
         self.ids = [i.split('.')[0] for i in self.files]
+        # self.ids = ["8"]
         self.files = [os.path.join(dataset, i) for i in self.files]
 
         self.regionSize = params.detectRegionSize
@@ -323,18 +325,18 @@ class ChestDivideDataset(torch.utils.data.IterableDataset):
             box = self.anno[self.ids[i]]
             # print(box)
 
-            wcnt = int((box[2] - box[0]) / self.sampleRate)
-            hcnt = int((box[3] - box[1]) / self.sampleRate)
+            wcnt = int(math.ceil(box[2] / self.sampleRate))
+            hcnt = int(math.ceil(box[3] / self.sampleRate))
 
-            for u in range(wcnt):
-                for v in range(hcnt):
+            for u in range(wcnt + 1):
+                for v in range(hcnt + 1):
                     yield self.getRegion(image,
                                          (
                                              (
                                                  int(box[0] * (1 - u / wcnt) +
-                                                     box[2] * (u / wcnt)),
+                                                     (box[0] + box[2]) * (u / wcnt)),
                                                  int(box[1] * (1 - v / hcnt) +
-                                                     box[3] * (v / hcnt))
+                                                     (box[1] + box[3]) * (v / hcnt))
                                              ),
                                              self.ids[i],
                                          ))

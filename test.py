@@ -340,13 +340,51 @@ def bboxUnion(A, B):
     return [x1, y1, x2 - x1, y2 - y1]
 
 
-def postProcess(params):
+def postProcess(params, merge=False):
     with open(os.path.join(params.median, "detection.json"), "r") as file:
         anno = json.load(file)
     intersect = None
     lastID = -1
     sum_score = 0.0
     cnt = 0
+
+    # imgBoxes = {}
+    # for box in anno["annotations"]:
+    #     bbox = box["bbox"]
+    #     box["bbox"] = list(map(float, bbox))
+    #     imgID = box["image_id"]
+    #     box["score"] = float(box["score"])
+    #     if imgID not in imgBoxes:
+    #         imgBoxes[imgID] = [box]
+    #     else:
+    #         imgBoxes[imgID].append(box)
+
+    # if merge:
+    #     result = []
+    #     for _, imgBox in imgBoxes.items():
+    #         boxes = {}
+    #         for x, box in enumerate(imgBox):
+    #             bbox = box["bbox"]
+    #             imgID = box["image_id"]
+    #             score = float(box["score"])
+
+    #             res = bbox
+    #             remove_ids = []
+    #             for i, b in boxes.items():
+    #                 intersect = bboxIntersect(res, b[0])
+    #                 if intersect[2] > 0 and intersect[3] > 0:
+    #                     res = intersect
+    #                     score = min(b[2], score)
+    #                     remove_ids.append(i)
+    #             for i in remove_ids:
+    #                 del boxes[i]
+    #             boxes[x] = (res, imgID, score)
+    #         for i, b in boxes.items():
+    #             result.append(b)
+    # else:
+    #     result = [(imgBox["bbox"], imgBox["image_id"], imgBox["score"])
+    #               for imgBox in anno["annotations"]]
+
     result = []
     for box in anno["annotations"]:
         bbox = box["bbox"]
@@ -490,15 +528,15 @@ if __name__ == "__main__":
     elif params.testTarget == "all":
         doAllTest(params)
     elif params.testTarget == "result":
-        view.showRibs(
-            8,
-            params.anno_path,
-            params.output_path
-        )
-        # files = os.listdir(params.data_set)
-        # for f in files:
         # view.showRibs(
-        # f.split('.')[0],
-        # params.anno_path,
-        # params.output_path
+        #     8,
+        #     params.anno_path,
+        #     params.output_path
         # )
+        files = os.listdir(params.data_set)
+        for f in files:
+            view.showRibs(
+                f.split('.')[0],
+                params.anno_path,
+                params.output_path
+            )

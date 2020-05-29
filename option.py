@@ -103,9 +103,9 @@ def read():
     parser.add_argument('--K', type=int, default=100,
                         help='maximum of objects')
     parser.add_argument('--conf_thresh', type=float,
-                        default=0.0001, help='confidence threshold')
+                        default=0.4, help='confidence threshold')
     parser.add_argument('--seg_thresh', type=float,
-                        default=0.0001, help='confidence threshold')
+                        default=0.5, help='confidence threshold')
     parser.add_argument('--num_classes', type=int,
                         default=1, help='number of classes')
     parser.add_argument('--ngpus', type=int, default=0, help='number of gpus')
@@ -120,7 +120,7 @@ def read():
                         help="Pixels per sample in detection")
     parser.add_argument('--detectRegionSize', type=int, default=360,
                         help="RegionSize in detection")
-    parser.add_argument('--detectThreshold', type=float, default=0.8,
+    parser.add_argument('--detectThreshold', type=float, default=0.1,
                         help="Threshold used in detection")
 
     parsed = parser.parse_args()
