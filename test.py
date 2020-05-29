@@ -236,16 +236,16 @@ def findFractureYolo(params):
         anno["annotations"].append(
             {
                 "bbox": [
-                    str(float(center[0]) - regionSize /
-                        2 + output['bbox'][0] * regionSize),
-                    str(float(center[1]) - regionSize /
-                        2 + output['bbox'][1] * regionSize),
-                    str(output['bbox'][2] * regionSize),
-                    str(output['bbox'][3] * regionSize)
+                    float(float(center[0]) - regionSize /
+                          2 + output['bbox'][0] * regionSize),
+                    float(float(center[1]) - regionSize /
+                          2 + output['bbox'][1] * regionSize),
+                    float(output['bbox'][2]) * regionSize,
+                    float(output['bbox'][3]) * regionSize
                 ],
                 "id": i,
                 "image_id": int(imgID),
-                "score": str(output['score']),
+                "score": float(output['score']),
             }
         )
     with open(os.path.join(params.median, "detection.json"), "w") as file:
@@ -485,7 +485,6 @@ def calcAP50(params):
     # print(IOU.get_avg_precision_at_iou(gt, pr))
 
 
-
 def YoloPost(params):
     with open(os.path.join(params.median, "detection.json"), "r") as file:
         detection = json.load(file)
@@ -514,7 +513,7 @@ def YoloPost(params):
         for s in spine:
             if chestx < s[0][0] < chestx + chestw:
                 minx += (s[1][0]+s[3][0])
-                maxx += (s[2][0]+ s[4][0])
+                maxx += (s[2][0] + s[4][0])
                 cnt += 2
         minx /= cnt
         maxx /= cnt
@@ -523,28 +522,29 @@ def YoloPost(params):
         for i in boxPerImage[image_id]:
             x, y, w, h = i[:4]
             # exclude the bbox if its position is bad
-            if x + w < chestx or x > chestx + chestw or y < chesty or y + h/2 > chesty + chesth: # out of chest range
+            if x + w < chestx or x > chestx + chestw or y < chesty or y + h/2 > chesty + chesth:  # out of chest range
                 continue
-            if abs(x - chestx) < 200 and abs(y - chesty) < 200: # at the left top
+            if abs(x - chestx) < 200 and abs(y - chesty) < 200:  # at the left top
                 continue
-            if abs(x + w - chestx - chestw) < 200 and abs(y - chesty) < 200: # at the right top
+            if abs(x + w - chestx - chestw) < 200 and abs(y - chesty) < 200:  # at the right top
                 continue
-            if y < chesty + 100: # at the above of the chest
+            if y < chesty + 100:  # at the above of the chest
                 continue
-            if minx < x + w < maxx or minx < x < maxx: # intersect with spine
+            if minx < x + w < maxx or minx < x < maxx:  # intersect with spine
                 continue
             if i[4] < params.conf_thresh:
                 continue
             res.append([x, y, x+w, y+h, i[4]])
 
         res = np.array(res)
-        pred = non_max_suppress(res)
+        pred = non_max_suppress(res) if len(res) > 0 else []
 
         for p in pred:
             t = dict()
-            t['bbox'] = [float(p[0]), float(p[1]), float(p[2] - p[0]), float(p[3] - p[1])]
+            t['bbox'] = [float(p[0]), float(p[1]), float(
+                p[2] - p[0]), float(p[3] - p[1])]
             t['score'] = float(p[4])
-            t['id'] = output_cnt
+            t['category_id'] = 1
             t['image_id'] = image_id
             output_cnt += 1
             output.append(t)
@@ -553,11 +553,9 @@ def YoloPost(params):
         json.dump(output, file, indent=4)
 
 
-
 def non_max_suppress(pred, threshold=0.3):
-
     x1, y1, x2, y2, scores = pred[:, 0], pred[:, 1], \
-                                 pred[:, 2], pred[:, 3], pred[:, 4]
+        pred[:, 2], pred[:, 3], pred[:, 4]
     areas = (x2 - x1 + 1) * (y2 - y1 + 1)
 
     order = scores.argsort()[::-1]
@@ -617,26 +615,30 @@ if __name__ == "__main__":
         findFractureClassifier(params)
     elif params.testTarget == "fractureYolo":
         findFractureYolo(params)
+        YoloPost(params)
+        calcAP50(params)
     elif params.testTarget == "fractureChest":
         findFractureChestDivide(params)
+        YoloPost(params)
+        calcAP50(params)
     elif params.testTarget == "postProcess":
         postProcess(params)
-    elfif params.testTarget == 'Yolopost':
-        Yolopost(params)
+    elif params.testTarget == 'Yolopost':
+        YoloPost(params)
     elif params.testTarget == "AP50":
         calcAP50(params)
     elif params.testTarget == "all":
         doAllTest(params)
     elif params.testTarget == "result":
-        # view.showRibs(
-        #     8,
-        #     params.anno_path,
-        #     params.output_path
-        # )
-        files = os.listdir(params.data_set)
-        for f in files:
-            view.showRibs(
-                f.split('.')[0],
-                params.anno_path,
-                params.output_path
-            )
+        view.showRibs(
+            8,
+            params.anno_path,
+            params.output_path
+        )
+        # files = os.listdir(params.data_set)
+        # for f in files:
+        #     view.showRibs(
+        #         f.split('.')[0],
+        #         params.anno_path,
+        #         params.output_path
+        #     )
