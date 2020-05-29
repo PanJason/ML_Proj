@@ -300,12 +300,12 @@ def test_chest(params):
     mydevice = torch.device(
         "cuda:0" if torch.cuda.is_available() else "cpu")
     model = model.to(mydevice)
-    files = os.listdir(params.data_set)
+    files = os.listdir(params.processed)
     result = {}
     for i, file in enumerate(files):
         file_id = file.split('.')[0]
         print(f"testing on image file ({i + 1}/{len(files)}): {file}")
-        img = cv2.imread(os.path.join(params.data_set, file))
+        img = cv2.imread(os.path.join(params.processed, file))
         img = cv2.resize(img, (448, 448))
         img1 = img.transpose(2, 0, 1)
         img1 = torch.from_numpy(img1).unsqueeze(0).float().cuda()
@@ -316,7 +316,7 @@ def test_chest(params):
         h=y2-y1
         bbox=[float(x1),float(y1),float(w),float(h)]
         result[i]={'bbox':bbox,'id':i,'image_id':file_id}
-    with open(os.path.join(params.median, "chest.json"), "w") as file:
+    with open(os.path.join(params.median, "chest.json"), "w+") as file:
         json.dump(result, file, indent=4)
     return result
 

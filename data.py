@@ -17,15 +17,25 @@ import option
 
 
 def dataprocess(input_img):
-    padding_size = (3056, 3056, 3)
+    padding_size = (3056, 3056)
     output_img = np.zeros(padding_size)
     w = min(padding_size[0], input_img.shape[0])
     h = min(padding_size[1], input_img.shape[1])
     output_img[0:w, 0:h] = input_img[0:w, 0:h]
 
     huidu = 160
-    output_img = output_img*160/np.mean(input_img)
+    output_img = output_img*huidu/np.mean(input_img)
     return output_img
+
+
+def dataPreProcess(params):
+    files = os.listdir(params.data_set)
+    for i, file in enumerate(files):
+        print(f"{i+1}/{len(files)}: {file}")
+        img = cv2.imread(os.path.join(params.data_set, file),
+                         cv2.IMREAD_GRAYSCALE)
+        img = dataprocess(img)
+        cv2.imwrite(os.path.join(params.processed, file), img)
 
 
 def getAnno(imgId, anno):
@@ -206,7 +216,7 @@ class VAEDataset(torch.utils.data.IterableDataset):
         self.dataset = dataset
         self.augment = augment
 
-        self.files = os.listdir(params.data_set)
+        self.files = os.listdir(params.processed)
         self.file_cnt = len(self.files)
 
         self.regionSize = params.regionSize
@@ -216,7 +226,7 @@ class VAEDataset(torch.utils.data.IterableDataset):
     def gen_data(self, start, end):
         for i in range(start, end):
             image = Image.open(os.path.join(
-                self.params.data_set, self.files[i]))
+                self.params.processed, self.files[i]))
             image = torchvision.transforms.Pad(int(self.regionSize/2))(image)
             for k in range(self.params.VAESamples):
                 pos = (random.randint(0, self.params.imageSize),
@@ -273,7 +283,7 @@ class ClassifierTestDataset(torch.utils.data.IterableDataset):
                 imgID
             )
                 for j in range(sample_cnt)]
-        points.append(samples)
+            points.append(samples)
         return itertools.chain(*points)
 
     def getRegion(self, image, info):
@@ -362,3 +372,97 @@ class ChestDivideDataset(torch.utils.data.IterableDataset):
                 math.ceil(self.file_cnt / float(worker_info.num_workers)))
             worker_id = worker_info.id
             return self.gen_data(worker_id * per_worker, min((worker_id+1) * per_worker, self.file_cnt))
+
+
+def create_fracture(json_path, image_path, image_save_path, sizen):
+    with open(json_path) as f:
+        instances = json.load(f)
+
+    anno = instances['annotations']
+    image_size = instances['images']
+    print(len(image_size))
+
+    cnt = 0
+    image_cnt = 0
+
+    for i in range(len(anno)):
+        x, y, width, height = anno[i]['bbox']
+        image_id = anno[i]['image_id']
+        while image_id > image_size[image_cnt]['id']:
+            image_cnt += 1
+            # print(image_cnt)
+        while image_id < image_size[image_cnt]['id']:
+            image_cnt -= 1
+        im = Image.open(image_path+str(image_id)+'.png', 'r')
+        im_num = random.randint(1, 3)
+        # im_num = 1
+        for k in range(im_num):
+            ranx = random.uniform(max(0, x + sizen - image_size[image_cnt]['width']), min(sizen - width, x))
+            rany = random.uniform(max(0, y + sizen - image_size[image_cnt]['height']), min(sizen - height, y))
+            region = im.crop((x - ranx, y - rany, x - ranx + sizen, y - rany + sizen))
+            region.save(image_save_path+str(cnt)+'.png', 'png')
+            cnt += 1
+
+    print(cnt)
+
+
+def create_nonfracture(json_path, json_add_path, image_path, image_save_path, sizen):
+    with open(json_path) as f:
+        instances = json.load(f)
+
+    anno = instances['annotations']
+    image_size = instances['images']
+    print(len(image_size))
+    image_dict = {}
+
+    cnt = 0
+    image_cnt = 0
+    for i in range(len(anno)):
+        x, y, width, height = anno[i]['bbox']
+        image_id = anno[i]['image_id']
+        while image_id > image_size[image_cnt]['id']:
+            image_cnt += 1
+            # print(image_cnt)
+        while image_id < image_size[image_cnt]['id']:
+            image_cnt -= 1
+        if image_id in image_dict:
+            image_dict[image_id].append((x, y, width, height))
+        else:
+            image_dict[image_id] = [image_size[image_cnt]['width'], image_size[image_cnt]['height']]
+            image_dict[image_id].append((x, y, width, height))
+
+    with open(json_add_path) as f:
+        instances = json.load(f)
+
+    anno_add = instances['poly']
+
+    for image_id in anno_add:
+        if len(anno_add[image_id]) > 1:
+            im = Image.open(image_path + str(image_id) + '.png', 'r')
+        # print(image_id)
+        width = image_dict[int(image_id)][0]
+        height = image_dict[int(image_id)][1]
+
+        for i in range(1, len(anno_add[image_id])):
+            for k in range(len(anno_add[image_id][i]) - 1):
+                x1, y1 = anno_add[image_id][i][k]
+                x2, y2 = anno_add[image_id][i][k+1]
+                u = random.uniform(0.2, 0.8)
+                ranx = u*x1 + (1-u)*x2 - 180
+                rany = u*y1 + (1-u)*y2 - 180
+                if ranx + sizen > width or rany + sizen > height or ranx < 0 or rany < 0:
+                    continue
+                success = True
+                for t in image_dict[int(image_id)][3:]:
+                    x, y, w, h = t
+                    if ranx + sizen <= x or ranx >= x + width or rany + sizen <= y or rany >= y + height:
+                        continue
+                    else:
+                        success = False
+                        break
+                if success:
+                    region = im.crop((ranx, rany, ranx + sizen, rany + sizen))
+                    region.save(image_save_path + str(cnt) + '.png', 'png')
+                    cnt += 1
+
+    print(cnt)

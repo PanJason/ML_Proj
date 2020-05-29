@@ -69,7 +69,7 @@ class Network(object):
         self.model.eval()
 
         dataset_module = self.dataset["spinal"]
-        dsets = dataset_module(data_dir=args.data_set,
+        dsets = dataset_module(data_dir=args.processed,
                                phase='test',
                                input_h=args.input_h,
                                input_w=args.input_w,
@@ -118,6 +118,6 @@ class Network(object):
                 for p in pts0
             ]
 
-        with open(os.path.join(args.median, "spine.json"), "w") as file:
+        with open(os.path.join(args.median, "spine.json"), "w+") as file:
             json.dump(result, file, indent=4)
         return result

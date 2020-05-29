@@ -11,7 +11,6 @@ import data
 import model
 import view
 import detector
-import IOU
 from utility import Timer
 from vertebraLandmark import spineFinder
 import yolo_for_chest
@@ -20,7 +19,10 @@ import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
 import torch
+from torch.autograd import Variable
+from torch.utils.data import DataLoader
 import torchvision
+from torchvision import transforms
 import cv2 as cv
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
@@ -116,12 +118,12 @@ def findRibs(params):
     # if params.useGPU:
     # ribTracer = ribTracer.cuda()
 
-    files = os.listdir(params.data_set)
+    files = os.listdir(params.processed)
     result = {}
     for i, file in enumerate(files):
         file_id = file.split('.')[0]
         print(f"Tracing on image file ({i + 1}/{len(files)}): {file}")
-        img = Image.open(os.path.join(params.data_set, file))
+        img = Image.open(os.path.join(params.processed, file))
         tracks = []
         for box in spines[file_id]:
             box = np.array(box)
@@ -132,7 +134,7 @@ def findRibs(params):
             track = [i.tolist() for i in track]
             tracks.append(track)
         result[file_id] = tracks
-    with open(os.path.join(params.median, "ribs.json"), "w") as file:
+    with open(os.path.join(params.median, "ribs.json"), "w+") as file:
         json.dump(result, file, indent=4)
     return result
 
@@ -140,7 +142,7 @@ def findRibs(params):
 def findFractureClassifier(params):
     with open(os.path.join(params.median, "ribs.json"), "r") as file:
         ribs = json.load(file)
-    dataset = data.ClassifierTestDataset(params.data_set, ribs, params)
+    dataset = data.ClassifierTestDataset(params.processed, ribs, params)
 
     # classifier = model.classifier(False, os.path.join(
     # params.model_path, "resnet34-333f7ec4.pth"))
@@ -196,15 +198,16 @@ def findFractureClassifier(params):
                 "score": float(score)
             }
         )
-    with open(os.path.join(params.median, "detection.json"), "w") as file:
+    with open(os.path.join(params.median, "detection.json"), "w+") as file:
         json.dump(anno, file, indent=4)
 
 
 def findFractureYolo(params):
     with open(os.path.join(params.median, "ribs.json"), "r") as file:
         ribs = json.load(file)
-    dataset = data.ClassifierTestDataset(params.data_set, ribs, params)
-    fd = detector.fracture_detector()
+    dataset = data.ClassifierTestDataset(params.processed, ribs, params)
+    fd = detector.fracture_detector(weights=os.path.join(
+        params.model_path, "detector_yolo.pt"))
     if params.useGPU:
         fd.model = fd.model.cuda()
     detected = []
@@ -248,7 +251,7 @@ def findFractureYolo(params):
                 "score": float(output['score']),
             }
         )
-    with open(os.path.join(params.median, "detection.json"), "w") as file:
+    with open(os.path.join(params.median, "detection.json"), "w+") as file:
         json.dump(anno, file, indent=4)
 
 
@@ -256,8 +259,9 @@ def findFractureChestDivide(params):
     with open(os.path.join(params.median, "ribs.json"), "r") as file:
         ribs = json.load(file)
     dataset = data.ChestDivideDataset(
-        params.data_set, os.path.join(params.median, "chest.json"), params)
-    fd = detector.fracture_detector()
+        params.processed, os.path.join(params.median, "chest.json"), params)
+    fd = detector.fracture_detector(weights=os.path.join(
+        params.model_path, "detector_yolo.pt"))
     if params.useGPU:
         fd.model = fd.model.cuda()
     detected = []
@@ -301,12 +305,65 @@ def findFractureChestDivide(params):
                 "score": str(output['score']),
             }
         )
-    with open(os.path.join(params.median, "detection.json"), "w") as file:
+    with open(os.path.join(params.median, "detection.json"), "w+") as file:
         json.dump(anno, file, indent=4)
 
 
 def findChest(params):
     yolo_for_chest.test_chest(params)
+
+
+def testClassifier(params):
+    gpu = [0]
+    cuda_gpu = torch.cuda.is_available()
+
+    model_path = os.join(params.model_path, 'classifier.pt')
+    test_path = params.processed
+
+    model = data.classifier(pre_train=False)
+
+    if cuda_gpu:
+        print('gpu is available')
+        model = torch.nn.DataParallel(model, device_ids=gpu).cuda()
+    else:
+        model = torch.nn.DataParallel(model)
+
+    try:
+        model.load_state_dict(torch.load(model_path))
+        print('load model successfully')
+    except:
+        print('cannot find model')
+
+    model.eval()
+
+    testset = torchvision.datasets.ImageFolder(root=test_path, transform=transforms.Compose([
+        transforms.Grayscale(),
+        transforms.ToTensor()
+    ]))
+
+    test_loader = DataLoader(testset, batch_size=4, shuffle=False)
+
+    correct = 0
+    total_test = 0
+    cnt = 0
+    cross_entropy = 0
+
+    with torch.no_grad():
+        for sample_batch in test_loader:
+            images, labels = sample_batch
+            if cuda_gpu:
+                images, labels = Variable(
+                    images.cuda()), Variable(labels.cuda())
+            out = model.forward(images)
+            loss = torch.nn.CrossEntropyLoss()(out, labels)
+
+            _, pred = torch.max(out, 1)
+            correct += (pred == labels).sum().item()
+            cross_entropy += loss
+            total_test += labels.size(0)
+            cnt += 1
+    print('Acc: {:.3f}, Loss: {:.3f}'.format(
+        correct / total_test, cross_entropy / cnt))
 
 
 def bboxIntersect(A, B):
@@ -386,33 +443,6 @@ def postProcess(params, merge=False):
         result = [(imgBox["bbox"], imgBox["image_id"], imgBox["score"])
                   for imgBox in anno["annotations"]]
 
-    # result = []
-    # for box in anno["annotations"]:
-    #     bbox = box["bbox"]
-    #     bbox = list(map(float, bbox))
-    #     imgID = box["image_id"]
-    #     score = float(box["score"])
-    #     if lastID != imgID:
-    #         if intersect is not None:
-    #             result.append((intersect, lastID, sum_score / cnt))
-    #         lastID = imgID
-    #         intersect = bbox
-    #         sum_score = score
-    #         cnt = 1
-    #     else:
-    #         I = bboxIntersect(bbox, intersect)
-    #         if I[2] > 0 and I[3] > 0:
-    #             intersect = I
-    #             cnt += 1
-    #             sum_score += score
-    #         else:
-    #             result.append((intersect, lastID, sum_score / cnt))
-    #             intersect = bbox
-    #             sum_score = score
-    #             cnt = 1
-    # if intersect is not None:
-    #     result.append((intersect, lastID, sum_score / cnt))
-
     widths = {}
     heights = {}
     for item in anno["images"]:
@@ -434,7 +464,7 @@ def postProcess(params, merge=False):
                 "score": score
             }
         )
-    with open(params.output_path, "w") as file:
+    with open(params.output_path, "w+") as file:
         json.dump(res, file, indent=4)
 
 
@@ -448,41 +478,6 @@ def calcAP50(params):
     cocoEval.evaluate()
     cocoEval.accumulate()
     cocoEval.summarize()
-
-    # with open(params.output_path, "r") as file:
-    #     predict = json.load(file)
-    # with open(params.anno_path, "r") as file:
-    #     target = json.load(file)
-
-    # gt = {}
-    # for b in target["annotations"]:
-    #     box = b["bbox"]
-    #     box[2] += box[0]
-    #     box[3] += box[1]
-    #     imgID = b["image_id"]
-    #     if imgID in gt:
-    #         gt[imgID].append(box)
-    #     else:
-    #         gt[imgID] = [box]
-
-    # pr = {}
-    # for b in predict:
-    #     box = b["bbox"]
-    #     box[2] += box[0]
-    #     box[3] += box[1]
-    #     score = b["score"]
-    #     imgID = b["image_id"]
-    #     if imgID in pr:
-    #         pr[imgID]["boxes"].append(box)
-    #         pr[imgID]["scores"].append(score)
-    #     else:
-    #         pr[imgID] = {"boxes": [box], "scores": [score]}
-
-    # with open("result/gt.json", "w") as file:
-    #     json.dump(gt, file, indent=4)
-    # with open("result/pr.json", "w") as file:
-    #     json.dump(pr, file, indent=4)
-    # print(IOU.get_avg_precision_at_iou(gt, pr))
 
 
 def YoloPost(params):
@@ -549,7 +544,7 @@ def YoloPost(params):
             output_cnt += 1
             output.append(t)
 
-    with open(params.output_path, "w") as file:
+    with open(params.output_path, "w+") as file:
         json.dump(output, file, indent=4)
 
 
@@ -581,15 +576,23 @@ def non_max_suppress(pred, threshold=0.3):
 
 
 def doAllTest(params):
+    if not os.path.exists(params.processed):
+        os.mkdir(params.processed)
+    if not os.path.exists(params.median):
+        os.mkdir(params.median)
+    print("Stage 0: Data Preprocess")
+    data.dataPreProcess(params)
     print("Stage 1: Finding spines")
     findSpine(params)
     print("Stage 2: Finding ribs")
     findRibs(params)
     print("Stage 3: Finding factures")
-    findFractureClassifier(params)
-    print("Stage 4: Post processing")
-    postProcess(params)
-    print("Stage 5: Evaluating")
+    findFractureYolo(params)
+    print("Stage 4: Finding Chest bound box")
+    findChest(params)
+    print("Stage 5: Post processing")
+    YoloPost(params)
+    print("Stage 6: Evaluating")
     calcAP50(params)
 
 
@@ -600,17 +603,14 @@ if __name__ == "__main__":
             anno = json.load(file)
         showRibTraceTrackDDPG("data/fracture/val_processed/101.png",
                               anno["poly"]["101"][1:], params)
+    elif params.testTarget == "preprocess":
+        data.dataPreProcess(params)
     elif params.testTarget == "spine":
-        view.showSpine("101")
+        findSpine(params)
     elif params.testTarget == "chest":
         findChest(params)
     elif params.testTarget == "ribs":
         findRibs(params)
-        # files = os.listdir(params.data_set)
-        # for f in files:
-        # view.showRibs(
-        # f.split('.')[0],
-        # )
     elif params.testTarget == "fracture":
         findFractureClassifier(params)
     elif params.testTarget == "fractureYolo":
@@ -630,15 +630,10 @@ if __name__ == "__main__":
     elif params.testTarget == "all":
         doAllTest(params)
     elif params.testTarget == "result":
-        view.showRibs(
-            8,
-            params.anno_path,
-            params.output_path
-        )
-        # files = os.listdir(params.data_set)
-        # for f in files:
-        #     view.showRibs(
-        #         f.split('.')[0],
-        #         params.anno_path,
-        #         params.output_path
-        #     )
+        files = os.listdir(params.processed)
+        for f in files:
+            view.showRibs(
+                f.split('.')[0],
+                params.anno_path,
+                params.output_path
+            )
