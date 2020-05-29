@@ -118,6 +118,6 @@ class Network(object):
                 for p in pts0
             ]
 
-        with open(os.path.join(args.median, "spine.json"), "w+") as file:
+        with open(os.path.join(args.median, "spine.json"), "w") as file:
             json.dump(result, file, indent=4)
         return result

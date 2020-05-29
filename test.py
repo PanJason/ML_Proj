@@ -134,7 +134,7 @@ def findRibs(params):
             track = [i.tolist() for i in track]
             tracks.append(track)
         result[file_id] = tracks
-    with open(os.path.join(params.median, "ribs.json"), "w+") as file:
+    with open(os.path.join(params.median, "ribs.json"), "w") as file:
         json.dump(result, file, indent=4)
     return result
 
@@ -198,7 +198,7 @@ def findFractureClassifier(params):
                 "score": float(score)
             }
         )
-    with open(os.path.join(params.median, "detection.json"), "w+") as file:
+    with open(os.path.join(params.median, "detection.json"), "w") as file:
         json.dump(anno, file, indent=4)
 
 
@@ -251,7 +251,7 @@ def findFractureYolo(params):
                 "score": float(output['score']),
             }
         )
-    with open(os.path.join(params.median, "detection.json"), "w+") as file:
+    with open(os.path.join(params.median, "detection.json"), "w") as file:
         json.dump(anno, file, indent=4)
 
 
@@ -305,7 +305,7 @@ def findFractureChestDivide(params):
                 "score": str(output['score']),
             }
         )
-    with open(os.path.join(params.median, "detection.json"), "w+") as file:
+    with open(os.path.join(params.median, "detection.json"), "w") as file:
         json.dump(anno, file, indent=4)
 
 
@@ -464,7 +464,7 @@ def postProcess(params, merge=False):
                 "score": score
             }
         )
-    with open(params.output_path, "w+") as file:
+    with open(params.output_path, "w") as file:
         json.dump(res, file, indent=4)
 
 
@@ -544,7 +544,7 @@ def YoloPost(params):
             output_cnt += 1
             output.append(t)
 
-    with open(params.output_path, "w+") as file:
+    with open(params.output_path, "w") as file:
         json.dump(output, file, indent=4)
 
 
