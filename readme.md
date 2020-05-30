@@ -4,7 +4,17 @@ This is a project for the course Machine Learning. The purpose of this project i
 
 ## Method
 
+1. Vertebra Localization. 
+2. Bounding Box Movement Prediction
+3. Chest Detection
+4. Fracture Detection
+5. Post Process
+
 ## Dataset
+
+##### To train YoloDetector:
+
+https://disk.pku.edu.cn:443/link/35A835D1CA7A36B07E6C9A17A99F1F89
 
 ## Additional Annotation
 
