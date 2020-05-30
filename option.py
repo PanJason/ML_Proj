@@ -5,7 +5,7 @@ def read():
     parser = argparse.ArgumentParser(description='Fracture Detection')
 
     parser.add_argument('--useGPU', action="store_true",
-                        default=False, help="Use GPU")
+                        default=True, help="Use GPU")
 
     parser.add_argument('--trainModel', default="None",
                         type=str, help="Specify which model to train")
@@ -13,12 +13,12 @@ def read():
                         type=str, help="Specify which model to continue training")
     parser.add_argument('--vertebra',  default=False, action="store_true",
                         help="Call vertebra landmark's main function")
-    parser.add_argument('--testTarget', default="All", type=str,
+    parser.add_argument('--testTarget', default="all", type=str,
                         help="Target of test")
     parser.add_argument('--median', default='median', type=str,
                         help="Path to median result files")
 
-    parser.add_argument('--data_set', default='data/fracture/train_processed',
+    parser.add_argument('--data_dir', default='data/fracture/train_processed',
                         type=str, help='Path to the dataset')
     parser.add_argument('--anno_path', default='data/fracture/annotations/anno_train.json',
                         type=str, help='Path to the dataset annotation')
@@ -32,8 +32,10 @@ def read():
                         type=str, help='Path to the val dataset')
     parser.add_argument('--val_addi_path', default='additional_anno/additional_anno_val.json',
                         type=str, help='Path to the additional val dataset annotation')
+    parser.add_argument('--processed', default='processed',
+                        type=str, help='Path to the processed dataset')
 
-    parser.add_argument('--batchSize', default=32, type=int,
+    parser.add_argument('--batchSize', default=8, type=int,
                         help='Batch size')
     parser.add_argument('--numEpochs', default=10, type=int,
                         help='Number of epochs to run')
@@ -103,7 +105,7 @@ def read():
     parser.add_argument('--K', type=int, default=100,
                         help='maximum of objects')
     parser.add_argument('--conf_thresh', type=float,
-                        default=0.4, help='confidence threshold')
+                        default=0.2, help='confidence threshold')
     parser.add_argument('--seg_thresh', type=float,
                         default=0.5, help='confidence threshold')
     parser.add_argument('--num_classes', type=int,
@@ -111,16 +113,14 @@ def read():
     parser.add_argument('--ngpus', type=int, default=0, help='number of gpus')
     parser.add_argument('--resume', type=str,
                         default='model_last.pth', help='weights to be resumed')
-    parser.add_argument('--data_dir', type=str,
-                        default='../../Datasets/spinal/', help='data directory')
     parser.add_argument('--phase', type=str,
                         default='test', help='data directory')
 
-    parser.add_argument('--detectRate', type=float, default=20,
+    parser.add_argument('--detectRate', type=float, default=50,
                         help="Pixels per sample in detection")
     parser.add_argument('--detectRegionSize', type=int, default=360,
                         help="RegionSize in detection")
-    parser.add_argument('--detectThreshold', type=float, default=0.1,
+    parser.add_argument('--detectThreshold', type=float, default=0.2,
                         help="Threshold used in detection")
 
     parsed = parser.parse_args()

@@ -43,7 +43,7 @@ def randomColor():
 def showImage(imgID, imgPath=None, annoPath=None, additionalAnno=None):
     'Show one image with annotation'
     if imgPath is None:
-        imgPath = params.data_set + "/" + str(imgID) + ".png"
+        imgPath = params.data_dir + "/" + str(imgID) + ".png"
     if annoPath is None:
         annoPath = params.anno_path
 
@@ -93,7 +93,7 @@ def showImage(imgID, imgPath=None, annoPath=None, additionalAnno=None):
 
 
 def showSpine(imgID):
-    imgPath = params.data_set + "/" + str(imgID) + ".png"
+    imgPath = params.data_dir + "/" + str(imgID) + ".png"
 
     img = cv.imread(imgPath)
     with open(path.join(params.median, "spine.json"), "r") as file:
@@ -110,7 +110,7 @@ def showSpine(imgID):
 
 
 def showRibs(imgID, label=None, result=None):
-    imgPath = params.data_set + "/" + str(imgID) + ".png"
+    imgPath = params.data_dir + "/" + str(imgID) + ".png"
 
     img = cv.imread(imgPath)
     img, hscale, wscale = scaling(img)
@@ -178,7 +178,7 @@ def boundBoxAnno(imgID):
     Click the third time to cancel all.
     Press any key to accept the marking and return the box.
     '''
-    imgPath = params.data_set + "/" + str(imgID) + ".png"
+    imgPath = params.data_dir + "/" + str(imgID) + ".png"
     img = cv.imread(imgPath)
 
     cnt = 0
@@ -229,7 +229,7 @@ def polyLineAnno(imgID):
     Press n for next polyline.
     Press f to stop recording and return.
     '''
-    imgPath = params.data_set + "/" + str(imgID) + ".png"
+    imgPath = params.data_dir + "/" + str(imgID) + ".png"
     img = cv.imread(imgPath)
     img, hscale, wscale = scaling(img)
     cv.putText(img, "ID: "+str(imgID), (0, 30),
@@ -281,7 +281,7 @@ def polyLineAnno(imgID):
 def makeAllBBoxAnno(save_path):
     'Mark all chest bound boxes of the data set(specified with program arguments --data_set).'
     bboxes = {}
-    allFiles = os.listdir(params.data_set)
+    allFiles = os.listdir(params.data_dir)
     for f in allFiles:
         num = int(f.split('.')[0])
         bbox = boundBoxAnno(num)
@@ -297,7 +297,7 @@ def makeAllPolyAnno(save_path, start_from=None, total=None):
     Use total to specify how many picture you need to make annotation.
     '''
     polys = {}
-    allFiles = os.listdir(params.data_set)
+    allFiles = os.listdir(params.data_dir)
     if total is None:
         total = len(allFiles)
     start = start_from is None

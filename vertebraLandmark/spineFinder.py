@@ -69,7 +69,7 @@ class Network(object):
         self.model.eval()
 
         dataset_module = self.dataset["spinal"]
-        dsets = dataset_module(data_dir=args.data_set,
+        dsets = dataset_module(data_dir=args.processed,
                                phase='test',
                                input_h=args.input_h,
                                input_w=args.input_w,
