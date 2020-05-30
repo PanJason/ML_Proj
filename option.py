@@ -35,7 +35,7 @@ def read():
     parser.add_argument('--processed', default='processed',
                         type=str, help='Path to the processed dataset')
 
-    parser.add_argument('--batchSize', default=32, type=int,
+    parser.add_argument('--batchSize', default=8, type=int,
                         help='Batch size')
     parser.add_argument('--numEpochs', default=10, type=int,
                         help='Number of epochs to run')

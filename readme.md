@@ -2,112 +2,29 @@
 
 This is a project for the course Machine Learning. The purpose of this project is to detect fractures in chest bones.
 
-## Method
+## Requirement
 
-## Dataset
+torch 1.5.0+cu101
+torchvision 0.6.0+cu101
+numpy 1.18.4
+pandas 1.0.3
+Pillow 7.1.2
+seaborn 0.10.1
+Cython 0.29.19
+matplotlib 3.1.3
+scipy 1.4.1
+pycocotools 2.0
+opencv
 
-## Additional Annotation
+If running in Windows, pycocotools is incompatible with numpy 1.18.4, please downgrade numpy to 1.17.4.
 
-files:
+## Usage
 
-+ Additional_anno_train.json
-+ Additional_anno_val.json
-
-```json
-{
-  "bbox":
-  {
-    ...
-  },
-  "poly":
-  {
-    ...
-  }
-}
+```bash
+python test.py --data_dir /path/to/fracture/test \
+               --anno_dir /path/to/anno_val.json \
+               --output_path /path/to/output/result.json \
+               --model_path saved_model
 ```
 
-### Boundbox of chest
-
-Item: "bbox".
-
-Each one is a key-value pair.
-
-Key: picture id.
-
-Value: `[[left, top],[width, height]]`
-
-### Outline and ribs
-
-Item: "poly".
-
-Each on is a key-value pair.
-
-Key: picture id.
-
-Value: a list of polylines.
-
-`[(x1,y1),(x2,y2),...,(xn,yn)]`
-
-The first polyline is the outline of chest bones. Marked clockwise, from bottom-left to top to bottom-right.
-
-The other polylines is ribs. Each one of them started from the outline to spine. Arranged clockwise, from bottom-left to top to bottom-right.
-
-## Median data files
-
-### spine.json
-
-```json
-{
-  id:[
-    [
-      [xc, yc],
-      [xtl, ytl],
-      [xtr, ytr],
-      [xbl, ybl],
-      [xbr, ybr]
-    ],
-    [
-      ...
-    ],
-    ...
-  ],
-  ...
-}
-```
-
-The json is a Dict.
-
-Key: picture id
-
-Value: a list of spine bones.
-
-Each spine bones is a list containing 5 points, which are: the center, the top-left, the top-right, the bottom-left, the bottom-right.
-
-Each point has the format `[x, y]`
-
-### ribs.json
-
-```json
-{
-  id:[
-    [
-      [x1, y1],
-      [x2, y2],
-      ...
-    ],
-    ...
-  ],
-  ...
-}
-```
-
-The json is a dict.
-
-Key: picture id
-
-Value: a list of rib polylines.
-
-Each rib polyline is a list of points, arranged from spine to the outside.
-
-Each point has the format `[x,y]`.
-
+The trained model is contained in ./saved_model.
