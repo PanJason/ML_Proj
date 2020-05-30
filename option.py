@@ -18,7 +18,7 @@ def read():
     parser.add_argument('--median', default='median', type=str,
                         help="Path to median result files")
 
-    parser.add_argument('--data_set', default='data/fracture/train_processed',
+    parser.add_argument('--data_dir', default='data/fracture/train_processed',
                         type=str, help='Path to the dataset')
     parser.add_argument('--anno_path', default='data/fracture/annotations/anno_train.json',
                         type=str, help='Path to the dataset annotation')
@@ -113,8 +113,6 @@ def read():
     parser.add_argument('--ngpus', type=int, default=0, help='number of gpus')
     parser.add_argument('--resume', type=str,
                         default='model_last.pth', help='weights to be resumed')
-    parser.add_argument('--data_dir', type=str,
-                        default='../../Datasets/spinal/', help='data directory')
     parser.add_argument('--phase', type=str,
                         default='test', help='data directory')
 

@@ -29,10 +29,10 @@ def dataprocess(input_img):
 
 
 def dataPreProcess(params):
-    files = os.listdir(params.data_set)
+    files = os.listdir(params.data_dir)
     for i, file in enumerate(files):
         print(f"{i+1}/{len(files)}: {file}")
-        img = cv2.imread(os.path.join(params.data_set, file),
+        img = cv2.imread(os.path.join(params.data_dir, file),
                          cv2.IMREAD_GRAYSCALE)
         img = dataprocess(img)
         cv2.imwrite(os.path.join(params.processed, file), img)
@@ -397,9 +397,12 @@ def create_fracture(json_path, image_path, image_save_path, sizen):
         im_num = random.randint(1, 3)
         # im_num = 1
         for k in range(im_num):
-            ranx = random.uniform(max(0, x + sizen - image_size[image_cnt]['width']), min(sizen - width, x))
-            rany = random.uniform(max(0, y + sizen - image_size[image_cnt]['height']), min(sizen - height, y))
-            region = im.crop((x - ranx, y - rany, x - ranx + sizen, y - rany + sizen))
+            ranx = random.uniform(
+                max(0, x + sizen - image_size[image_cnt]['width']), min(sizen - width, x))
+            rany = random.uniform(
+                max(0, y + sizen - image_size[image_cnt]['height']), min(sizen - height, y))
+            region = im.crop(
+                (x - ranx, y - rany, x - ranx + sizen, y - rany + sizen))
             region.save(image_save_path+str(cnt)+'.png', 'png')
             cnt += 1
 
@@ -428,7 +431,8 @@ def create_nonfracture(json_path, json_add_path, image_path, image_save_path, si
         if image_id in image_dict:
             image_dict[image_id].append((x, y, width, height))
         else:
-            image_dict[image_id] = [image_size[image_cnt]['width'], image_size[image_cnt]['height']]
+            image_dict[image_id] = [image_size[image_cnt]
+                                    ['width'], image_size[image_cnt]['height']]
             image_dict[image_id].append((x, y, width, height))
 
     with open(json_add_path) as f:

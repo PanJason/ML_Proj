@@ -4,6 +4,7 @@ import math
 import json
 import os
 import copy
+import itertools
 
 import ddpg
 import option
@@ -580,6 +581,11 @@ def doAllTest(params):
         os.mkdir(params.processed)
     if not os.path.exists(params.median):
         os.mkdir(params.median)
+    resPath = os.path.split(params.output_path)
+    resPath = list(itertools.accumulate(resPath))
+    for p in resPath[:-1]:
+        if p != "" and not os.path.exists(p):
+            os.mkdir(p)
     print("Stage 0: Data Preprocess")
     data.dataPreProcess(params)
     print("Stage 1: Finding spines")

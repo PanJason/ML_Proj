@@ -25,7 +25,7 @@ import utility
 
 def trainRibTracer(params):
     trainDataset = data.RibTraceDataset(
-        params.data_set, params.addi_path, params, True)
+        params.data_dir, params.addi_path, params, True)
     valDataset = data.RibTraceDataset(
         params.val_data_set, params.val_addi_path, params)
 
@@ -100,7 +100,7 @@ def trainRibTracer(params):
 
 
 def trainVAE(params):
-    trainDataset = data.VAEDataset(params.data_set, params, True)
+    trainDataset = data.VAEDataset(params.data_dir, params, True)
     valDataset = data.VAEDataset(params.val_data_set, params, True)
 
     VAEmodel = model.VAE(params)
@@ -169,7 +169,7 @@ def trainVAE(params):
 
 def trainRibTracerDDPG(params):
     trainDataset = data.RibTraceDDPGDataset(
-        params.data_set, params.addi_path, params, True)
+        params.data_dir, params.addi_path, params, True)
     valDataset = data.RibTraceDDPGDataset(
         params.val_data_set, params.val_addi_path, params)
 
@@ -334,7 +334,7 @@ def trainDetector(params):
             self.mode = mode
             self.is_aug = is_aug
             if mode == 0:  # 0 for train
-                self.img_path = params.data_set
+                self.img_path = params.data_dir
                 self.anno_path = params.addi_path
             elif mode == 1:  # 1 for validation
                 self.img_path = params.val_data_set
