@@ -330,7 +330,7 @@ def test_chest(params):
         w = x2-x1
         h = y2-y1
         bbox = [float(x1), float(y1), float(w), float(h)]
-        result[i] = {'bbox': bbox, 'id': i, 'image_id': file_id}
+        result[file_id] = bbox
     with open(os.path.join(params.median, "chest.json"), "w") as file:
         json.dump(result, file, indent=4)
     return result
